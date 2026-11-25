@@ -1,0 +1,33 @@
+# Environment & Secrets
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# Model caches & uploaded runtime files
+model_cache/
+backend/storage/
+*.log
+
+# Seed PDFs (tracked via manifest.json; download via scripts/download_seed_reports.py)
+data/raw_documents/*.pdf
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

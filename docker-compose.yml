@@ -1,0 +1,73 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: missionwise-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-missionwise}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-missionwise_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-missionwise}
+    ports:
+      - "5432:5432"
+    volumes:
+      - missionwise_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-missionwise} -d ${POSTGRES_DB:-missionwise}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: missionwise-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-missionwise}:${POSTGRES_PASSWORD:-missionwise_dev_password}@db:5432/${POSTGRES_DB:-missionwise}
+      DATA_DIR: /data
+      STORAGE_DIR: /app/storage
+      MODEL_CACHE_DIR: /app/model_cache
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+      - ./scripts:/scripts
+      - missionwise_models:/app/model_cache
+      - missionwise_storage:/app/storage
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')\""]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: missionwise-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+
+volumes:
+  missionwise_pgdata:
+  missionwise_models:
+  missionwise_storage:

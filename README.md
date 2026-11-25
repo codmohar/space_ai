@@ -1,0 +1,72 @@
+# MISSIONWISE AI
+
+**Space Mission Engineering Intelligence Platform** (AVISHKAR 2K26 — Problem #10: Space Mission Lessons-Learned Assistant with Cited Answers)  
+Team: **ProtoGuys**
+
+> **Safety Notice:** MISSIONWISE is a knowledge-support tool, not a certifier of spacecraft safety. All findings must be verified against the cited primary engineering reports.
+
+---
+
+## Phase 1 Capabilities
+
+- **PostgreSQL 16 + pgvector Schema (Alembic):** Full schema covering auth/audit, documents & versions, hierarchical `document_sections`, `document_chunks` with PDF bounding boxes and `tsvector` lexical search, `document_embeddings` (HNSW), `retrieval_logs`, `conversations`/`messages`/`citations`, and Phase 2+ failure chain & engineering knowledge graph tables.
+- **PDF Ingestion Pipeline:**
+  - Mandatory `source_url` and `licence` validation (public reports only).
+  - Magic-byte (`%PDF-`), MIME, size, and SHA-256 hash-based deduplication.
+  - PyMuPDF (`fitz`) text, metadata, `get_toc()` + font-size heading heuristic fallback, and exact bounding-box extraction (`[x0, y0, x1, y1]`).
+  - Automatic Tesseract OCR fallback for scanned/low-text pages with mean word confidence and alphanumeric quality checks.
+  - Structure- and page-preserving semantic chunking with merged bbox retention.
+- **Hybrid Retrieval & Grounded RAG:**
+  - `BAAI/bge-small-en-v1.5` embeddings (configurable) + pgvector HNSW dense search + BM25/FTS lexical search + Reciprocal Rank Fusion (RRF) + Cross-Encoder Reranker (`BAAI/bge-reranker-base`).
+  - Provider-agnostic `LLMClient` (Gemini default via `GEMINI_API_KEY`) with prompt-injection delimiting and Pydantic JSON validation + retry.
+  - Pre-response **Citation Validator** checking chunk/document/page resolution and quote/lexical support before returning answers.
+  - **Deterministic Retrieval Confidence** (`Strong`, `Partial`, `Conflicting`, `Insufficient`, `None`) — never LLM self-reported.
+  - **Exact Abstention Policy:** low-evidence or ungrounded queries return `"Not found in the available mission reports. More supporting documentation is required."`
+- **Frontend Console & Citation Viewer:**
+  - Instrument-grade mission-control UI built from `frontend/src/styles/design-tokens.ts`.
+  - Resizable split-pane Research Assistant + PDF Citation Viewer (`react-pdf`) that opens directly at the cited page and overlays translucent amber highlights via chunk bounding boxes.
+
+---
+
+## Honest STAIR Implementation Status
+
+MISSIONWISE ships STAIR-style structure-aware retrieval incrementally and labels every level honestly:
+- **L1 (Phase 1 — Active):** Hierarchical document section index (`document_sections` from ToC + font-size heuristics) with modular `SectionSelector` interface.
+- **L2 (Phase 2 — Planned):** ToC-aware query-to-leaf selection (STAIR-inspired).
+- **L3/L4 (Phase 3+ — Planned):** Fine-tuned LoRA ToC+query → leaf ID selector, constrained decoding, and benchmark evaluation.
+
+---
+
+## Quickstart
+
+### 1. Configure Environment
+```bash
+cp .env.example .env
+# Add your GEMINI_API_KEY to .env
+```
+
+### 2. Download & Verify 3 Public Seed Reports
+```bash
+python scripts/download_seed_reports.py
+```
+
+### 3. Start Stack via Docker Compose
+```bash
+docker compose up --build -d
+```
+
+### 4. Seed the Knowledge Base
+```bash
+docker compose exec backend python /scripts/ingest_documents.py --manifest /data/raw_documents/manifest.json
+```
+
+### 5. Access Services
+- Frontend UI: `http://localhost:5173`
+- Backend API & Swagger: `http://localhost:8000/docs`
+- Health Check: `http://localhost:8000/api/health`
+
+### 6. Run Tests
+```bash
+cd backend
+pytest -v
+```

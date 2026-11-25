@@ -1,0 +1,39 @@
+[
+  {
+    "doc_code": "NASA-MCO-1999",
+    "title": "Mars Climate Orbiter Mishap Investigation Board Phase I Report",
+    "filename": "mars_climate_orbiter_phase1_1999.pdf",
+    "source_url": "https://llis.nasa.gov/llis_lib/pdf/1009464main1_0641-mr.pdf",
+    "fallback_urls": [
+      "https://sma.nasa.gov/docs/default-source/safety-messages/safetymessage-2009-08-01-themarsclimateorbitermishap.pdf"
+    ],
+    "licence": "Public Domain (U.S. Government Work - NASA)",
+    "org": "NASA",
+    "mission": "Mars Climate Orbiter",
+    "version": "1.0"
+  },
+  {
+    "doc_code": "NASA-A13-1970",
+    "title": "Report of Apollo 13 Review Board",
+    "filename": "apollo_13_review_board_1970.pdf",
+    "source_url": "https://ntrs.nasa.gov/api/citations/19700076776/downloads/19700076776.pdf",
+    "fallback_urls": [
+      "https://history.nasa.gov/afj/ap13fj/pdf/report-of-a13-review-board-19700615-19700076776.pdf"
+    ],
+    "licence": "Public Domain (U.S. Government Work - NASA)",
+    "org": "NASA",
+    "mission": "Apollo 13",
+    "version": "1.0"
+  },
+  {
+    "doc_code": "NASA-MPL-2000",
+    "title": "Report on the Loss of the Mars Polar Lander and Deep Space 2 Missions",
+    "filename": "mars_polar_lander_jpl_2000.pdf",
+    "source_url": "https://ntrs.nasa.gov/api/citations/20000061966/downloads/20000061966.pdf",
+    "fallback_urls": [],
+    "licence": "Public Domain (U.S. Government Work - NASA / JPL)",
+    "org": "NASA / JPL",
+    "mission": "Mars Polar Lander",
+    "version": "1.0"
+  }
+]
