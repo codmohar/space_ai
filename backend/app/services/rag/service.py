@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 from app.core.config import ABSTENTION_MESSAGE, get_settings
 from app.core.errors import ApiError
+from app.models.documents import Document
 from app.models.rag import Citation, Conversation, Message
 from app.schemas import ChatResponse, ClaimOut, EvidenceClassification, SelectedSectionOut
 from app.services.llm.client import LLMClient, get_llm_client
