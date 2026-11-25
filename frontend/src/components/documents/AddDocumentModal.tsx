@@ -153,7 +153,7 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
                 value={docCode}
                 onChange={(e) => setDocCode(e.target.value)}
                 placeholder="e.g. NASA-MCO-1999"
-                className="mt-1 w-full rounded border border-console-borderStrong bg-console-base px-2.5 py-1.5 text-xs text-ink-primary focus:border-signal-amber focus:outline-none"
+                className="mt-1 w-full rounded border border-console-borderStrong bg-white text-gray-950 px-2.5 py-1.5 text-xs placeholder:text-gray-400 focus:border-signal-amber focus:outline-none"
               />
             </div>
 
@@ -164,7 +164,7 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Apollo 13 Review Board Report"
-                className="mt-1 w-full rounded border border-console-borderStrong bg-console-base px-2.5 py-1.5 text-xs text-ink-primary focus:border-signal-amber focus:outline-none"
+                className="mt-1 w-full rounded border border-console-borderStrong bg-white text-gray-950 px-2.5 py-1.5 text-xs placeholder:text-gray-400 focus:border-signal-amber focus:outline-none"
               />
             </div>
 
@@ -175,7 +175,7 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
                 value={mission}
                 onChange={(e) => setMission(e.target.value)}
                 placeholder="e.g. Apollo 13, Mars Orbiter"
-                className="mt-1 w-full rounded border border-console-borderStrong bg-console-base px-2.5 py-1.5 text-xs text-ink-primary focus:border-signal-amber focus:outline-none"
+                className="mt-1 w-full rounded border border-console-borderStrong bg-white text-gray-950 px-2.5 py-1.5 text-xs placeholder:text-gray-400 focus:border-signal-amber focus:outline-none"
               />
             </div>
 
@@ -186,7 +186,7 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
                 value={organization}
                 onChange={(e) => setOrganization(e.target.value)}
                 placeholder="e.g. NASA, ISRO, ESA"
-                className="mt-1 w-full rounded border border-console-borderStrong bg-console-base px-2.5 py-1.5 text-xs text-ink-primary focus:border-signal-amber focus:outline-none"
+                className="mt-1 w-full rounded border border-console-borderStrong bg-white text-gray-950 px-2.5 py-1.5 text-xs placeholder:text-gray-400 focus:border-signal-amber focus:outline-none"
               />
             </div>
 
@@ -209,7 +209,7 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
                 value={sourceUrl}
                 onChange={(e) => setSourceUrl(e.target.value)}
                 placeholder={noPublicUrl ? "uploaded, no public URL" : "https://ntrs.nasa.gov/citations/..."}
-                className="mt-1 w-full rounded border border-console-borderStrong bg-console-base px-2.5 py-1.5 text-xs text-ink-primary disabled:opacity-50 focus:border-signal-amber focus:outline-none"
+                className="mt-1 w-full rounded border border-console-borderStrong bg-white text-gray-950 px-2.5 py-1.5 text-xs placeholder:text-gray-400 disabled:opacity-50 focus:border-signal-amber focus:outline-none"
               />
             </div>
 
@@ -219,7 +219,7 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
                 type="text"
                 value={licence}
                 onChange={(e) => setLicence(e.target.value)}
-                className="mt-1 w-full rounded border border-console-borderStrong bg-console-base px-2.5 py-1.5 text-xs text-ink-primary focus:border-signal-amber focus:outline-none"
+                className="mt-1 w-full rounded border border-console-borderStrong bg-white text-gray-950 px-2.5 py-1.5 text-xs placeholder:text-gray-400 focus:border-signal-amber focus:outline-none"
               />
             </div>
 
@@ -228,7 +228,7 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
               <select
                 value={classification}
                 onChange={(e) => setClassification(e.target.value as any)}
-                className="mt-1 w-full rounded border border-console-borderStrong bg-console-base px-2.5 py-1.5 text-xs text-ink-primary focus:border-signal-amber focus:outline-none"
+                className="mt-1 w-full rounded border border-console-borderStrong bg-white text-gray-950 px-2.5 py-1.5 text-xs focus:border-signal-amber focus:outline-none"
               >
                 <option value="public">Public (Unrestricted)</option>
                 <option value="internal">Internal (Engineering Clearance)</option>

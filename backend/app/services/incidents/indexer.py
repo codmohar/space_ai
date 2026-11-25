@@ -203,11 +203,20 @@ class IncidentKGIndexer:
             mech = infer_mechanism_from_text(cand.text)
             quote = anomaly_sent[:260]
 
+            comp_name = cand.section_title[:120].strip()
+            if not comp_name or comp_name.lower() in ("document body", "1", "1.0", "introduction"):
+                comp_name = f"{subsystem} Component"
+
+            # Derive concise anomaly title instead of raw paragraph
+            anomaly_heading = cand.section_title[:90].strip()
+            if not anomaly_heading or anomaly_heading.lower() in ("document body", "1", "1.0"):
+                anomaly_heading = f"{doc.mission} Investigation Finding"
+
             items.append(
                 _LLMIncidentItem(
                     subsystem=subsystem,
-                    component=cand.section_title[:120],
-                    anomaly_title=f"{doc.mission}: {cand.section_title[:90]}",
+                    component=comp_name,
+                    anomaly_title=f"{doc.mission}: {anomaly_heading}",
                     anomaly_description=anomaly_sent[:500],
                     root_cause=anomaly_sent[:400],
                     consequence=sents[-1][:350] if len(sents) > 1 else anomaly_sent[:350],
@@ -383,17 +392,38 @@ class IncidentKGIndexer:
             relations_created += 1
 
         for inc in pending_incidents:
+            # 1. Clean, human-readable entity labels grounded in the report
+            clean_subsystem = inc.subsystem.strip()
+            clean_comp = inc.component.strip() if inc.component else f"{clean_subsystem} Subsystem"
+            
+            # Anomaly label: clear, concise anomaly name (first 60 chars)
+            clean_anomaly = inc.anomaly_title.strip()
+            if len(clean_anomaly) > 75:
+                clean_anomaly = clean_anomaly[:72] + "..."
+
+            # Root cause label: concise summary of cause clause
+            clean_cause = inc.root_cause.strip()
+            # If root cause is a long paragraph, extract leading proposition or clause
+            first_cause_clause = re.split(r"[;:]", clean_cause)[0].strip()
+            clean_cause_label = (first_cause_clause[:80] + "...") if len(first_cause_clause) > 80 else first_cause_clause
+
+            # Corrective action label: concise action verb clause
+            clean_action = inc.corrective_action.strip()
+            first_action_clause = re.split(r"[;:]", clean_action)[0].strip()
+            clean_action_label = (first_action_clause[:80] + "...") if len(first_action_clause) > 80 else first_action_clause
+
             e_mission = get_or_create_entity("mission", inc.mission, inc)
-            e_sub = get_or_create_entity("subsystem", inc.subsystem, inc)
-            e_anom = get_or_create_entity("anomaly", inc.anomaly_title, inc)
-            e_cause = get_or_create_entity("root_cause", inc.root_cause[:180], inc)
-            e_action = get_or_create_entity("corrective_action", inc.corrective_action[:180], inc)
+            e_sub = get_or_create_entity("subsystem", clean_subsystem, inc)
+            e_comp = get_or_create_entity("component", clean_comp, inc)
+            e_anom = get_or_create_entity("anomaly", clean_anomaly, inc)
+            e_cause = get_or_create_entity("root_cause", clean_cause_label, inc)
+            e_action = get_or_create_entity("corrective_action", clean_action_label, inc)
 
             db.add(
                 CorrectiveAction(
                     id=uuid.uuid4(),
                     mission=inc.mission,
-                    title=inc.anomaly_title[:250],
+                    title=clean_anomaly[:250],
                     description=inc.corrective_action,
                     subsystem=inc.subsystem,
                     document_id=inc.document_id,
@@ -404,14 +434,12 @@ class IncidentKGIndexer:
                 )
             )
 
+            # Strictly grounded aerospace hierarchy:
+            # Mission -> has_subsystem -> Subsystem -> has_component -> Component -> experienced_anomaly -> Anomaly -> caused_by -> Root Cause
+            #                                                                                                      \-> mitigated_by -> Corrective Action
             add_relation(e_mission, e_sub, "has_subsystem", inc)
-            if inc.component:
-                e_comp = get_or_create_entity("component", inc.component, inc)
-                add_relation(e_sub, e_comp, "has_component", inc)
-                add_relation(e_comp, e_anom, "experienced_anomaly", inc)
-            else:
-                add_relation(e_sub, e_anom, "experienced_anomaly", inc)
-
+            add_relation(e_sub, e_comp, "has_component", inc)
+            add_relation(e_comp, e_anom, "experienced_anomaly", inc)
             add_relation(e_anom, e_cause, "caused_by", inc)
             add_relation(e_anom, e_action, "mitigated_by", inc)
 
