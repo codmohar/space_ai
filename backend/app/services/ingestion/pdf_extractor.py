@@ -329,7 +329,81 @@ def _infer_numbering_level(line: str, font_size: float, threshold: float) -> int
     return 2
 
 
+def _parse_printed_toc_page(pages: list[ExtractedPage]) -> list[tuple[int, str, int]]:
+    """Detect and parse explicit printed 'Table of Contents' page in scanned or text PDFs."""
+    toc_entries: list[tuple[int, str, int]] = []
+    
+    # 1. Search first 10 pages for an explicit "Table of Contents" or "Contents" title
+    toc_page: Optional[ExtractedPage] = None
+    for p in pages[:10]:
+        combined_text = "\n".join(b.text for b in p.blocks).lower()
+        if "table of contents" in combined_text or "contents\n" in combined_text or "contents \n" in combined_text:
+            toc_page = p
+            break
+
+    if not toc_page:
+        return []
+
+    lines = []
+    for b in toc_page.blocks:
+        lines.extend(b.text.splitlines())
+
+    # Map section titles to their likely start page by scanning subsequent pages
+    full_doc_lines: list[tuple[int, str]] = [
+        (p.page_number, line.strip())
+        for p in pages
+        for b in p.blocks
+        for line in b.text.splitlines()
+        if len(line.strip()) > 3
+    ]
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or len(line) < 3 or len(line) > 120:
+            continue
+        if any(h in line.lower() for h in ("table of contents", "contents", "inquiry board report", "page |", "page 1")):
+            continue
+
+        # Look for pattern: "1.1 General description" or "1. The failure" or "Conclusions"
+        num_match = re.match(r"^(\d+(?:\.\d+)*)\.?\s+(.+)$", line)
+        if num_match:
+            sec_num = num_match.group(1)
+            sec_title = num_match.group(2).strip()
+            level = min(4, sec_num.count(".") + 1)
+            full_title = f"{sec_num} {sec_title}"
+
+            # Find page where this heading actually appears in the document
+            found_page = toc_page.page_number + 1
+            for p_num, doc_line in full_doc_lines:
+                if p_num <= toc_page.page_number:
+                    continue
+                # Match heading keywords in doc line
+                if sec_title.lower() in doc_line.lower() or full_title.lower() in doc_line.lower():
+                    found_page = p_num
+                    break
+
+            toc_entries.append((level, full_title, found_page))
+        elif re.match(r"^[A-Z][a-zA-Z\s]{3,40}$", line):
+            # Non-numbered top-level chapter (e.g. "Conclusions", "The failure", "Foreword")
+            found_page = toc_page.page_number + 1
+            for p_num, doc_line in full_doc_lines:
+                if p_num <= toc_page.page_number:
+                    continue
+                if line.lower() in doc_line.lower():
+                    found_page = p_num
+                    break
+            toc_entries.append((1, line, found_page))
+
+    return toc_entries
+
+
 def _build_sections_from_heuristics(pages: list[ExtractedPage]) -> list[ExtractedSection]:
+    # 1. First attempt: Parse explicit printed Table of Contents page
+    printed_toc = _parse_printed_toc_page(pages)
+    if printed_toc and len(printed_toc) >= 3:
+        return _finalize_hierarchy(printed_toc, len(pages), extraction_method="printed_toc")
+
+    # 2. Second attempt: Font size & OCR heading heuristics
     font_sizes = [
         b.max_font_size
         for p in pages
@@ -345,7 +419,7 @@ def _build_sections_from_heuristics(pages: list[ExtractedPage]) -> list[Extracte
     for page in pages:
         for blk in page.blocks:
             first_line = blk.text.splitlines()[0].strip()
-            if len(first_line) < 3 or len(first_line) > 120 or len(blk.text) > 180:
+            if len(first_line) < 3 or len(first_line) > 120 or len(blk.text) > 220:
                 continue
             # Skip pure page numbers or table dates
             if re.match(r"^[\d\W]+$", first_line):
@@ -353,13 +427,18 @@ def _build_sections_from_heuristics(pages: list[ExtractedPage]) -> list[Extracte
 
             is_numbered = bool(
                 re.match(
-                    r"^(?:\d+(?:\.\d+){0,3}\.?\s+[A-Z]|(?:Section|Chapter|Appendix|PART)\s+[A-Z0-9])",
+                    r"^(?:\d+(?:\.\d+){0,3}\.?\s+[A-Za-z]|(?:Section|Chapter|Appendix|PART)\s+[A-Z0-9])",
                     first_line,
                     re.IGNORECASE,
                 )
             )
-            looks_like_heading = blk.max_font_size >= heading_threshold or (
-                blk.is_bold and is_numbered
+            # For OCR pages where max_font_size is not natively populated
+            is_ocr_heading = blk.ocr_used and is_numbered and len(first_line) < 90
+
+            looks_like_heading = (
+                (blk.max_font_size >= heading_threshold and not blk.ocr_used)
+                or (blk.is_bold and is_numbered)
+                or is_ocr_heading
             )
             if looks_like_heading:
                 key = (first_line.lower(), page.page_number)

@@ -211,38 +211,58 @@ class IngestionPipeline:
         extracted = UniversalDocumentParser.extract(raw_bytes=raw_bytes, filename=file_path.name)
         chunk_drafts = chunk_extracted_document(extracted)
 
-        doc = Document(
-            doc_code=doc_code,
-            title=title,
-            source_url=source_url,
-            licence=licence,
-            org=org,
-            mission=mission,
-            file_path=str(file_path.resolve()),
-            file_hash=file_hash,
-            page_count=extracted.page_count,
-            version=version,
-            classification=classification,
-            ingestion_status="completed",
-            metadata_json={
+        doc = db.execute(
+            select(Document).where(Document.doc_code == doc_code)
+        ).scalar_one_or_none()
+
+        if doc is None:
+            doc = Document(
+                doc_code=doc_code,
+                title=title,
+                source_url=source_url,
+                licence=licence,
+                org=org,
+                mission=mission,
+                file_path=str(file_path.resolve()),
+                file_hash=file_hash,
+                page_count=extracted.page_count,
+                version=version,
+                classification=classification,
+                ingestion_status="completed",
+                metadata_json={
+                    "pdf_metadata": extracted.pdf_metadata,
+                    "ocr_pages": extracted.ocr_pages,
+                    "low_quality_ocr_pages": extracted.low_quality_ocr_pages,
+                    "toc_extraction_method": extracted.toc_extraction_method,
+                },
+            )
+            db.add(doc)
+            db.flush()
+            db.add(
+                DocumentVersion(
+                    document_id=doc.id,
+                    version=version,
+                    file_hash=file_hash,
+                    file_path=str(file_path.resolve()),
+                    notes="Initial ingestion",
+                )
+            )
+        else:
+            doc.title = title
+            doc.source_url = source_url
+            doc.licence = licence
+            doc.org = org
+            doc.mission = mission
+            doc.page_count = extracted.page_count
+            doc.version = version
+            doc.classification = classification
+            doc.metadata_json = {
                 "pdf_metadata": extracted.pdf_metadata,
                 "ocr_pages": extracted.ocr_pages,
                 "low_quality_ocr_pages": extracted.low_quality_ocr_pages,
                 "toc_extraction_method": extracted.toc_extraction_method,
-            },
-        )
-        db.add(doc)
-        db.flush()
-
-        db.add(
-            DocumentVersion(
-                document_id=doc.id,
-                version=version,
-                file_hash=file_hash,
-                file_path=str(file_path.resolve()),
-                notes="Initial ingestion",
-            )
-        )
+            }
+            db.flush()
 
         # Insert sections preserving parent links
         temp_to_uuid: dict[int, uuid.UUID] = {}
