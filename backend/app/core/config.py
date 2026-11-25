@@ -64,7 +64,16 @@ class Settings(BaseSettings):
     stair_base_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
     eval_results_path: Path = Path("../data/evaluation/retrieval_results.json")
 
-    # Voice (faster-whisper STT + optional Piper TTS)
+    # Voice (Sarvam AI primary STT/TTS + faster-whisper / Piper fallback)
+    sarvam_api_key: str = ""
+    sarvam_stt_model: str = "saarika:v1"
+    sarvam_tts_model: str = "bulbul:v1"
+    sarvam_language_code: str = "en-IN"
+    sarvam_speaker: str = "meera"
+    sarvam_pace: float = 1.05
+    sarvam_loudness: float = 1.5
+    sarvam_sample_rate: int = 16000
+    prefer_sarvam_voice: bool = True
     whisper_model_size: str = "base.en"
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"

@@ -1,4 +1,4 @@
-"""faster-whisper STT service with aerospace vocabulary prompting and fallback detection."""
+"""Speech-to-Text (STT) service supporting Sarvam AI (primary) with faster-whisper fallback."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.core.config import get_settings
+from app.services.voice.sarvam import SarvamVoiceClient
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class TranscriptionResult:
     duration_s: float
     used_fallback: bool = False
     error: Optional[str] = None
+    engine: str = "faster-whisper"
 
 
 class STTService:
@@ -31,12 +33,14 @@ class STTService:
         compute_type: str = "int8",
         download_root: Optional[str] = None,
         enabled: bool = True,
+        sarvam_client: Optional[SarvamVoiceClient] = None,
     ) -> None:
         self.model_size = model_size
         self.device = device
         self.compute_type = compute_type
         self.download_root = download_root
         self.enabled = enabled
+        self.sarvam = sarvam_client or SarvamVoiceClient()
         self._model = None
         self._load_error: Optional[str] = None
 
@@ -64,7 +68,18 @@ class STTService:
             return None
 
     def is_available(self) -> bool:
+        if self.sarvam.is_configured():
+            return True
         return self.enabled and self._load_error is None
+
+    @property
+    def active_engine(self) -> str:
+        settings = get_settings()
+        if self.sarvam.is_configured() and getattr(settings, "prefer_sarvam_voice", True):
+            return "sarvam"
+        if self.enabled and self._load_error is None:
+            return "faster-whisper"
+        return "browser_web_speech"
 
     def transcribe_bytes(
         self,
@@ -73,8 +88,30 @@ class STTService:
         suffix: str = ".webm",
     ) -> TranscriptionResult:
         if not audio_bytes:
-            return TranscriptionResult(text="", language="en", duration_s=0.0)
+            return TranscriptionResult(text="", language="en", duration_s=0.0, engine=self.active_engine)
 
+        settings = get_settings()
+
+        # 1. Attempt Sarvam STT first if configured
+        if self.sarvam.is_configured() and getattr(settings, "prefer_sarvam_voice", True):
+            filename = f"audio{suffix}"
+            text, err = self.sarvam.transcribe(
+                audio_bytes=audio_bytes,
+                filename=filename,
+                language_code=getattr(settings, "sarvam_language_code", "en-IN"),
+                prompt=initial_prompt,
+            )
+            if err is None and text is not None:
+                return TranscriptionResult(
+                    text=text,
+                    language=getattr(settings, "sarvam_language_code", "en-IN"),
+                    duration_s=0.0,
+                    used_fallback=False,
+                    engine="sarvam",
+                )
+            logger.warning("Sarvam STT failed or skipped, falling back to local faster-whisper: %s", err)
+
+        # 2. Local faster-whisper fallback
         model = self._ensure_model()
         if model is None:
             return TranscriptionResult(
@@ -83,6 +120,7 @@ class STTService:
                 duration_s=0.0,
                 used_fallback=True,
                 error=self._load_error or "faster-whisper unavailable",
+                engine="browser_web_speech",
             )
 
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
@@ -101,6 +139,7 @@ class STTService:
                 language=getattr(info, "language", "en") or "en",
                 duration_s=round(float(getattr(info, "duration", 0.0) or 0.0), 2),
                 used_fallback=False,
+                engine="faster-whisper",
             )
 
 
@@ -114,4 +153,5 @@ def get_stt_service() -> STTService:
         compute_type=settings.whisper_compute_type,
         download_root=str(settings.model_cache_dir / "whisper"),
         enabled=settings.enable_server_stt,
+        sarvam_client=SarvamVoiceClient(),
     )

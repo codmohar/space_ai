@@ -203,6 +203,27 @@ export function useVoiceAssistant({
     stopAudioPlayback,
   ]);
 
+  // Detect active server voice capabilities on mount
+  useEffect(() => {
+    let mounted = true;
+    api
+      .voiceCapabilities()
+      .then((cap) => {
+        if (!mounted) return;
+        if (cap.server_stt_engine === "sarvam" || cap.server_tts_engine === "sarvam") {
+          setEngineBadge("Sarvam AI Voice");
+        } else if (cap.server_stt_engine) {
+          setEngineBadge(`WS / ${cap.server_stt_engine}`);
+        }
+      })
+      .catch(() => {
+        // keep default
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   // Sync updated conversation/mission/selector settings to open WS
   useEffect(() => {
     const ws = wsRef.current;

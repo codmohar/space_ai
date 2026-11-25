@@ -32,9 +32,9 @@ def voice_capabilities() -> dict:
     tts = get_tts_service()
     return {
         "server_stt_available": stt.is_available(),
-        "server_stt_engine": "faster-whisper",
+        "server_stt_engine": stt.active_engine,
         "server_tts_available": tts.is_available(),
-        "server_tts_engine": "piper" if tts.is_available() else "browser_speech_synthesis",
+        "server_tts_engine": tts.active_engine,
     }
 
 
@@ -54,6 +54,7 @@ async def transcribe_audio(
         "duration_s": res.duration_s,
         "used_fallback": res.used_fallback,
         "error": res.error,
+        "engine": getattr(res, "engine", "faster-whisper"),
         "vocab_prompt": vocab_prompt,
     }
 
@@ -224,7 +225,7 @@ async def voice_stream_ws(websocket: WebSocket) -> None:
                         {
                             "type": "stt_fallback",
                             "turn_id": my_turn,
-                            "reason": stt_res.error or "faster-whisper unavailable",
+                            "reason": stt_res.error or f"{stt.active_engine} unavailable",
                         }
                     )
                     continue
