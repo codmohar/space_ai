@@ -369,7 +369,13 @@ class FailureChainService:
             quote = first_sent[:140]
 
             is_root = any(w in c.section_title.lower() for w in ("root", "cause", "finding", "mishap"))
-            ev_type: EventType = "root_cause" if is_root else "anomaly"
+            is_loss = any(w in c.section_title.lower() for w in ("loss", "destruction", "failure", "impact"))
+            if is_root:
+                ev_type: EventType = "initial_defect"
+            elif is_loss:
+                ev_type = "mission_loss"
+            else:
+                ev_type = "anomaly"
             ev_class: EvidenceClassification = "official_root_cause" if is_root else "explicitly_stated"
 
             temp_id = f"e{idx}"
