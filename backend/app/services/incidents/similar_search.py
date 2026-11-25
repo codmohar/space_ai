@@ -29,6 +29,12 @@ class ExtractedProblemProfile:
     subsystems: list[str]
     mechanisms: list[str]
     keywords: list[str]
+    risk_hypotheses: list[str] = None
+    design_risk_summary: str = ""
+
+    def __post_init__(self):
+        if self.risk_hypotheses is None:
+            self.risk_hypotheses = []
 
 
 @dataclass
@@ -64,10 +70,23 @@ def extract_problem_entities(problem_description: str) -> ExtractedProblemProfil
             mechanisms.append(mech)
             matched_kws.extend(hits)
 
+    risk_hypotheses: list[str] = []
+    if any(k in lower for k in ("cryo", "tank", "heater", "thermostat", "oxygen", "stir")):
+        risk_hypotheses.append("[Inferred] Cryogenic thermal expansion, heater element breakdown, or insulation degradation during dwell.")
+    if any(k in lower for k in ("thruster", "pulse", "software", "unit", "force", "metric", "pound", "newton")):
+        risk_hypotheses.append("[Inferred] Software coordinate conversion mismatch or force scaling discontinuity under dynamic closed-loop control.")
+    if any(k in lower for k in ("sensor", "transient", "hall", "touchdown", "shutdown", "switch", "altimeter")):
+        risk_hypotheses.append("[Inferred] Spurious sensor polling transient or un-debounced switch reading triggering unrecoverable engine state cut-off.")
+    if any(k in lower for k in ("pressure", "rupture", "seal", "o-ring", "joint", "burst")):
+        risk_hypotheses.append("[Inferred] Overpressure or thermal elasticity failure across structural seals or high-pressure gas fittings.")
+    if not risk_hypotheses:
+        risk_hypotheses.append("[Inferred] Multi-subsystem interface mismatch during anomalous operating environmental conditions.")
+
     return ExtractedProblemProfile(
         subsystems=subsystems,
         mechanisms=mechanisms,
         keywords=list(dict.fromkeys(matched_kws or _tok(problem_description)[:8])),
+        risk_hypotheses=risk_hypotheses,
     )
 
 
@@ -108,6 +127,22 @@ class SimilarFailuresService:
         mission_filter: Optional[str] = None,
     ) -> tuple[ExtractedProblemProfile, list[SimilarIncidentMatch]]:
         profile = extract_problem_entities(problem_description)
+
+        # Auto-index any document that does not yet have incidents indexed
+        unindexed_docs = db.execute(
+            select(Document.id).where(
+                ~Document.id.in_(select(MissionIncident.document_id).distinct())
+            )
+        ).scalars().all()
+        if unindexed_docs:
+            from app.services.incidents.indexer import IncidentKGIndexer
+            indexer = IncidentKGIndexer()
+            for u_doc_id in unindexed_docs:
+                try:
+                    indexer.index_document(db=db, document_id=u_doc_id, force_rebuild=False)
+                    db.commit()
+                except Exception:
+                    db.rollback()
 
         stmt = (
             select(MissionIncident, Document, DocumentChunk, DocumentSection)
@@ -202,4 +237,28 @@ class SimilarFailuresService:
             )
 
         matches.sort(key=lambda m: m.total_relevance, reverse=True)
-        return profile, matches[:top_k]
+        top_matches = matches[:top_k]
+
+        if top_matches:
+            unique_missions = sorted(list({m.incident.mission for m in top_matches}))
+            dominant_mechs = list(
+                dict.fromkeys(
+                    [m.incident.failure_mechanism for m in top_matches if m.incident.failure_mechanism]
+                    + profile.mechanisms
+                )
+            )
+            mech_str = ", ".join(dominant_mechs[:3]) if dominant_mechs else "subsystem interface sensitivity"
+            profile.design_risk_summary = (
+                f"Evaluation of proposed engineering design against {len(rows)} indexed mission failure precedents "
+                f"across {len(unique_missions)} mission campaigns ({', '.join(unique_missions[:3])}) indicates "
+                f"primary failure modes associated with {mech_str}. "
+                f"Cross-referencing {len(top_matches)} relevant historical anomalies reveals critical sensitivities in "
+                f"{', '.join(profile.subsystems[:2]) if profile.subsystems else 'spacecraft subsystems'}. "
+                f"Review documented root causes and board corrective actions before approving baseline design."
+            )
+        else:
+            profile.design_risk_summary = (
+                "No direct historical failure matches identified with sufficient engineering correlation threshold."
+            )
+
+        return profile, top_matches

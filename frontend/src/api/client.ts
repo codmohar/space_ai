@@ -51,6 +51,36 @@ export interface SelectedSectionOut {
   reason: string;
 }
 
+export interface DiagnosticChunkScore {
+  chunk_id: string;
+  doc_code: string;
+  page: number;
+  dense: number;
+  bm25: number;
+  rrf: number;
+  rerank: number;
+}
+
+export interface RetrievalDiagnosticsOut {
+  documents_considered: number;
+  tocs_scanned: number;
+  stair_level: string;
+  selector_name: string;
+  selected_sections_count: number;
+  dense_count: number;
+  bm25_count: number;
+  rrf_pool_count: number;
+  dense_ms: number;
+  bm25_ms: number;
+  rerank_ms: number;
+  total_ms: number;
+  top_dense_score: number;
+  top_bm25_score: number;
+  top_rrf_score: number;
+  top_rerank_score: number;
+  chunks: DiagnosticChunkScore[];
+}
+
 export interface ChatResponse {
   conversation_id: string;
   message_id: string;
@@ -69,6 +99,7 @@ export interface ChatResponse {
   selector_name: string;
   selected_sections: SelectedSectionOut[];
   used_section_ids: string[];
+  diagnostics?: RetrievalDiagnosticsOut;
 }
 
 export interface VoiceCapabilities {
@@ -172,6 +203,8 @@ export interface SimilarFailuresSearchResponse {
   extracted_subsystems: string[];
   extracted_mechanisms: string[];
   extracted_keywords: string[];
+  risk_hypotheses?: string[];
+  design_risk_summary?: string;
   results: SimilarIncidentOut[];
 }
 
@@ -240,6 +273,20 @@ export interface DocumentSummary {
   chunk_count: number;
   section_count: number;
   created_at: string;
+}
+
+export interface IngestionJobOut {
+  job_id: string;
+  doc_code: string;
+  filename: string;
+  file_type: string;
+  status: "queued" | "processing" | "indexed" | "failed" | "cancelled";
+  progress_pct: number;
+  document_id?: string | null;
+  error_message?: string | null;
+  logs: string[];
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DocumentSectionNode {

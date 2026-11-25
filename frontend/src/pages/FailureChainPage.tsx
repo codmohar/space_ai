@@ -96,6 +96,13 @@ export function FailureChainPage() {
     enabled: Boolean(selectedDoc?.id),
   });
 
+  useEffect(() => {
+    if (!selectedEvent && eventsQuery.data && eventsQuery.data.length > 0) {
+      setSelectedEvent(eventsQuery.data[0]);
+      setInspectorTab("details");
+    }
+  }, [eventsQuery.data, selectedEvent]);
+
   const relsQuery = useQuery({
     queryKey: ["failure-relationships", selectedDoc?.id],
     queryFn: () => api.getFailureRelationships(selectedDoc!.id),
@@ -157,6 +164,10 @@ export function FailureChainPage() {
         data: {
           event: ev,
           isSelected: selectedEvent?.id === ev.id,
+          onSelect: (item: FailureEventOut) => {
+            setSelectedEvent(item);
+            setInspectorTab("details");
+          },
         },
       };
     });

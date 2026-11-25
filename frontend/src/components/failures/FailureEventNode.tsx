@@ -5,10 +5,11 @@ import { designTokens } from "../../styles/design-tokens";
 export interface FailureNodeData extends Record<string, unknown> {
   event: FailureEventOut;
   isSelected: boolean;
+  onSelect?: (ev: FailureEventOut) => void;
 }
 
 export function FailureEventNode({ data }: NodeProps) {
-  const { event, isSelected } = data as FailureNodeData;
+  const { event, isSelected, onSelect } = data as FailureNodeData;
   const classBadge =
     designTokens.evidenceClassificationLabels[event.evidence_classification] ||
     designTokens.evidenceClassificationLabels.explicitly_stated;
@@ -17,7 +18,8 @@ export function FailureEventNode({ data }: NodeProps) {
 
   return (
     <div
-      className={`w-[260px] rounded bg-console-surface p-3 text-left transition-colors ${
+      onClick={() => onSelect?.(event)}
+      className={`w-[260px] cursor-pointer rounded bg-console-surface p-3 text-left transition-colors ${
         isInference ? "border-2 border-dashed" : "border"
       } ${
         isSelected

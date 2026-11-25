@@ -119,13 +119,13 @@ class HybridRetriever:
         )
         selected_section_ids = selection_res.selected_section_ids
 
-        # 1. Dense vector search (pgvector cosine similarity)
+        # 1. Dense vector search: Leaf sections + Global safety net pass
         t_dense_start = time.perf_counter()
         embedder = get_embedding_service()
         query_vec = embedder.embed_query(query)
 
         distance_expr = DocumentEmbedding.embedding.cosine_distance(query_vec)
-        dense_stmt = (
+        base_dense = (
             select(
                 DocumentChunk,
                 Document,
@@ -136,42 +136,61 @@ class HybridRetriever:
             .join(Document, Document.id == DocumentChunk.document_id)
             .outerjoin(DocumentSection, DocumentSection.id == DocumentChunk.section_id)
             .order_by(distance_expr.asc())
-            .limit(self.settings.retrieval_top_k_dense)
         )
         if scoped_doc_ids:
-            dense_stmt = dense_stmt.where(DocumentChunk.document_id.in_(scoped_doc_ids))
-        if selected_section_ids:
-            dense_stmt = dense_stmt.where(DocumentChunk.section_id.in_(selected_section_ids))
+            base_dense = base_dense.where(DocumentChunk.document_id.in_(scoped_doc_ids))
         if allowed_classifications:
-            dense_stmt = dense_stmt.where(Document.classification.in_(allowed_classifications))
+            base_dense = base_dense.where(Document.classification.in_(allowed_classifications))
 
-        dense_rows = db.execute(dense_stmt).all()
+        # (a) Pass 1: In-section dense search
+        dense_rows_section = []
+        if selected_section_ids:
+            dense_stmt_sec = base_dense.where(DocumentChunk.section_id.in_(selected_section_ids)).limit(
+                self.settings.retrieval_top_k_dense
+            )
+            dense_rows_section = list(db.execute(dense_stmt_sec).all())
+
+        # (b) Pass 2: Global safety net dense search (ensures no valid answer is hidden by section misclassification)
+        dense_stmt_global = base_dense.limit(self.settings.retrieval_top_k_dense)
+        dense_rows_global = list(db.execute(dense_stmt_global).all())
+
+        # Merge dense rows preserving highest score
+        seen_dense_chunks: set[uuid.UUID] = set()
+        dense_rows = []
+        for r in (dense_rows_section + dense_rows_global):
+            chk_id = r[0].id
+            if chk_id not in seen_dense_chunks:
+                seen_dense_chunks.add(chk_id)
+                dense_rows.append(r)
+        dense_rows = dense_rows[: self.settings.retrieval_top_k_dense * 2]
         dense_ms = (time.perf_counter() - t_dense_start) * 1000.0
 
-        # 2. BM25 lexical search (Postgres FTS candidate pool + BM25Okapi exact rescoring)
+        # 2. BM25 lexical search: In-section + Global safety net pass
         t_bm25_start = time.perf_counter()
-        bm25_pool_stmt = (
+        base_bm25_pool = (
             select(DocumentChunk, Document, DocumentSection)
             .join(Document, Document.id == DocumentChunk.document_id)
             .outerjoin(DocumentSection, DocumentSection.id == DocumentChunk.section_id)
         )
         if scoped_doc_ids:
-            bm25_pool_stmt = bm25_pool_stmt.where(DocumentChunk.document_id.in_(scoped_doc_ids))
-        if selected_section_ids:
-            bm25_pool_stmt = bm25_pool_stmt.where(DocumentChunk.section_id.in_(selected_section_ids))
+            base_bm25_pool = base_bm25_pool.where(DocumentChunk.document_id.in_(scoped_doc_ids))
         if allowed_classifications:
-            bm25_pool_stmt = bm25_pool_stmt.where(Document.classification.in_(allowed_classifications))
-        if selected_section_ids:
-            bm25_pool_stmt = bm25_pool_stmt.where(DocumentChunk.section_id.in_(selected_section_ids))
+            base_bm25_pool = base_bm25_pool.where(Document.classification.in_(allowed_classifications))
 
-        # Use Postgres FTS when corpus is large, or full scoped pool for accurate BM25 IDF
         fts_query = func.websearch_to_tsquery("english", query)
-        fts_rows = db.execute(
-            bm25_pool_stmt.where(DocumentChunk.tsv.op("@@")(fts_query)).limit(120)
-        ).all()
-        if len(fts_rows) < 25:
-            # Fallback to scoped corpus chunks so technical acronyms/tokens aren't missed
-            fts_rows = db.execute(bm25_pool_stmt.limit(800)).all()
+        fts_rows_sec = []
+        if selected_section_ids:
+            fts_stmt_sec = base_bm25_pool.where(
+                DocumentChunk.section_id.in_(selected_section_ids) & DocumentChunk.tsv.op("@@")(fts_query)
+            ).limit(80)
+            fts_rows_sec = list(db.execute(fts_stmt_sec).all())
+
+        fts_stmt_global = base_bm25_pool.where(DocumentChunk.tsv.op("@@")(fts_query)).limit(120)
+        fts_rows_global = list(db.execute(fts_stmt_global).all())
+
+        fts_rows = fts_rows_sec + [r for r in fts_rows_global if r not in fts_rows_sec]
+        if len(fts_rows) < 30:
+            fts_rows = list(db.execute(base_bm25_pool.limit(800)).all())
 
         bm25_ranked: list[tuple[DocumentChunk, Document, Optional[DocumentSection], float]] = []
         if fts_rows:

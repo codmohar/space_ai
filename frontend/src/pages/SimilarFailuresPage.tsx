@@ -6,6 +6,7 @@ import {
   GitBranch,
   Layers,
   Search,
+  ShieldAlert,
   X,
 } from "lucide-react";
 import {
@@ -19,8 +20,10 @@ import { useWorkspaceStore } from "../stores/workspaceStore";
 import { designTokens } from "../styles/design-tokens";
 
 const SAMPLE_PROBLEMS = [
+  "Novel dual-stage hypergolic descent engine with pulse-width modulation valves and ground software trajectory scaling",
+  "Composite cryogenic oxygen tank with integrated immersion heater thermostat switches and Teflon insulated wiring",
+  "Autonomous touchdown detection logic using multi-redundant laser altimeters and landing leg compression switches",
   "Ground software thruster impulse unit mismatch causing trajectory altitude error at Mars",
-  "Cryogenic oxygen tank heater thermostat switch failure and wiring short during stir",
   "Spurious Hall effect landing leg sensor transient triggering premature descent engine shutdown",
 ];
 
@@ -113,22 +116,27 @@ export function SimilarFailuresPage() {
             </button>
           </div>
 
-          <form onSubmit={handleSearch} className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <input
-              type="text"
+          <form onSubmit={handleSearch} className="mt-3 flex flex-col gap-2">
+            <textarea
+              rows={3}
               value={problem}
               onChange={(e) => setProblem(e.target.value)}
-              placeholder="Describe the anomaly, subsystem symptom, or failure mechanism..."
-              className="flex-1 rounded border border-console-borderStrong bg-console-bg px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-signal-amber focus:outline-none"
+              placeholder="Describe a novel engineering design proposal, subsystem architecture, or historical anomaly symptom to find historical failure precedents across all mission reports..."
+              className="w-full rounded border border-console-borderStrong bg-console-bg px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-signal-amber focus:outline-none resize-none font-sans"
             />
-            <button
-              type="submit"
-              disabled={searchMutation.isPending || problem.trim().length < 4}
-              className="inline-flex items-center justify-center gap-1.5 rounded border border-signal-amber bg-signal-amber px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-console-base hover:bg-signal-amber/90 disabled:opacity-40"
-            >
-              <Search className="h-3.5 w-3.5" />
-              {searchMutation.isPending ? "Searching..." : "Find Similar Incidents"}
-            </button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-mono text-[10px] text-ink-muted">
+                Tip: Enter detailed engineering proposals to evaluate cross-mission risk precedents & failure mechanisms.
+              </span>
+              <button
+                type="submit"
+                disabled={searchMutation.isPending || problem.trim().length < 4}
+                className="inline-flex items-center justify-center gap-1.5 rounded border border-signal-amber bg-signal-amber px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-console-base hover:bg-signal-amber/90 disabled:opacity-40"
+              >
+                <Search className="h-3.5 w-3.5" />
+                {searchMutation.isPending ? "Searching All Reports..." : "Analyze Precedents & Risks"}
+              </button>
+            </div>
           </form>
 
           <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -174,6 +182,36 @@ export function SimilarFailuresPage() {
                     {searchResult.extracted_keywords.join(", ")}
                   </span>
                 )}
+            </div>
+          )}
+
+          {/* Design Risk Summary & Architectural Precedents */}
+          {searchResult?.design_risk_summary && (
+            <div className="rounded border border-signal-amber/40 bg-signal-amberDim/40 p-4">
+              <div className="flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-signal-amber">
+                <ShieldAlert className="h-4 w-4" />
+                SYSTEM DESIGN RISK SUMMARY & ARCHITECTURAL PRECEDENTS
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-ink-primary font-mono">
+                {searchResult.design_risk_summary}
+              </p>
+            </div>
+          )}
+
+          {/* Inferred Risk Hypotheses */}
+          {searchResult?.risk_hypotheses && searchResult.risk_hypotheses.length > 0 && (
+            <div className="rounded border border-console-border bg-console-surface p-3 space-y-1.5 font-mono text-xs">
+              <div className="text-[10px] uppercase tracking-wider text-ink-muted">
+                INFERRED RISK HYPOTHESES (SYSTEM INFERENCE):
+              </div>
+              <ul className="list-disc list-inside space-y-1 text-ink-secondary text-[11px]">
+                {searchResult.risk_hypotheses.map((rh, idx) => (
+                  <li key={idx} className="leading-relaxed">
+                    <span className="text-signal-amber font-semibold">{rh.slice(0, 10)}</span>
+                    {rh.slice(10)}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 

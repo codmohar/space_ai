@@ -239,7 +239,7 @@ class IngestionPipeline:
                 document_id=doc.id,
                 version=version,
                 file_hash=file_hash,
-                file_path=str(pdf_path.resolve()),
+                file_path=str(file_path.resolve()),
                 notes="Initial ingestion",
             )
         )
@@ -298,6 +298,20 @@ class IngestionPipeline:
                     embedding=vec,
                 )
             )
+
+        # Atomic corpus version increment on new ingestion
+        from sqlalchemy import text
+        try:
+            db.execute(
+                text(
+                    "UPDATE corpus_metadata SET version = version + 1, "
+                    "document_count = (SELECT COUNT(*) FROM documents), "
+                    "chunk_count = (SELECT COUNT(*) FROM document_chunks), "
+                    "updated_at = NOW() WHERE id = 1"
+                )
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
         db.commit()
         return IngestionResult(

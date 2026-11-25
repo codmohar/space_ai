@@ -50,6 +50,8 @@ def search_similar_failures(
         extracted_subsystems=profile.subsystems,
         extracted_mechanisms=profile.mechanisms,
         extracted_keywords=profile.keywords,
+        risk_hypotheses=getattr(profile, "risk_hypotheses", []),
+        design_risk_summary=getattr(profile, "design_risk_summary", ""),
         results=[
             SimilarIncidentOut(
                 incident_id=m.incident.id,

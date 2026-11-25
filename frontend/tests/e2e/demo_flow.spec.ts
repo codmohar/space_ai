@@ -56,10 +56,14 @@ test.describe("MISSIONWISE AI — Full End-to-End Demo Flow", () => {
     if (!hasNodes) {
       await page.getByRole("button", { name: /Reconstruct Failure Chain/i }).click();
     }
+    await expect(page.getByRole("button", { name: /Reconstructing/i })).not.toBeVisible({ timeout: 45_000 });
     await expect(rfNode).toBeVisible({ timeout: 45_000 });
-    await rfNode.click({ force: true });
-    const openPdfBtn = page.getByRole("button", { name: /Open PDF at Page/i });
-    await expect(openPdfBtn).toBeVisible();
+    await page.locator(".react-flow__node h4").first().click({ force: true });
+    const openPdfBtn = page.getByRole("button", { name: /Open PDF at page/i });
+    if (!(await openPdfBtn.isVisible().catch(() => false))) {
+      await rfNode.click({ force: true });
+    }
+    await expect(openPdfBtn).toBeVisible({ timeout: 15_000 });
     await openPdfBtn.click();
     await expect(page.getByText(/Source & Licence|Public Domain/i).first()).toBeVisible({
       timeout: 15_000,

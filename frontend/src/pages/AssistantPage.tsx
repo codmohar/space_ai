@@ -1,7 +1,16 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, BookOpen, RotateCcw, Send } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
+  Send,
+} from "lucide-react";
 import { api, type ChatResponse, type CitationOut } from "../api/client";
+import { CitationChip } from "../components/chat/CitationChip";
 import { ClaimBlock } from "../components/chat/ClaimBlock";
 import { ConfidenceMeter } from "../components/chat/ConfidenceMeter";
 import { SplitPane } from "../components/layout/SplitPane";
@@ -19,6 +28,7 @@ const SUGGESTED_QUERIES = [
 
 export function AssistantPage() {
   const [input, setInput] = useState("");
+  const [openDiagnosticsTurnId, setOpenDiagnosticsTurnId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const {
@@ -308,13 +318,117 @@ export function AssistantPage() {
             }
           }
 
+          const isDiagOpen = openDiagnosticsTurnId === turn.id;
+          const diag = res.diagnostics;
+
           return (
             <div key={turn.id} className="space-y-3">
-              <ConfidenceMeter
-                category={res.confidence}
-                score={res.confidence_score}
-                stairLevel={`${res.stair_level} (${res.selector_name})`}
-              />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <ConfidenceMeter
+                  category={res.confidence}
+                  score={res.confidence_score}
+                  stairLevel={`${res.stair_level} (${res.selector_name})`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setOpenDiagnosticsTurnId(isDiagOpen ? null : turn.id)}
+                  className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 font-mono text-[11px] transition-colors ${
+                    isDiagOpen
+                      ? "border-signal-amber bg-signal-amber text-console-base font-semibold"
+                      : "border-console-borderStrong bg-console-surface text-ink-secondary hover:border-signal-amber hover:text-ink-primary"
+                  }`}
+                >
+                  <Activity className="h-3 w-3" />
+                  Why this answer? (Diagnostics)
+                  {isDiagOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </button>
+              </div>
+
+              {/* Retrieval Diagnostics Drawer */}
+              {isDiagOpen && (
+                <div className="rounded border border-signal-amber/40 bg-console-elevated p-3.5 space-y-3 font-mono text-xs">
+                  <div className="flex items-center justify-between border-b border-console-border pb-2 text-[11px] uppercase tracking-wider text-signal-amber">
+                    <span>RETRIEVAL & STAIR PIPELINE TELEMETRY</span>
+                    <span>STAGE LATENCIES (TOTAL: {diag?.total_ms?.toFixed(1) ?? "--"} ms)</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+                    <div className="rounded border border-console-border bg-console-surface p-2">
+                      <div className="text-ink-muted">DOCS CONSIDERED</div>
+                      <div className="text-sm font-semibold text-ink-primary">{diag?.documents_considered ?? 1}</div>
+                    </div>
+                    <div className="rounded border border-console-border bg-console-surface p-2">
+                      <div className="text-ink-muted">TOCS SCANNED</div>
+                      <div className="text-sm font-semibold text-ink-primary">{diag?.tocs_scanned ?? 1}</div>
+                    </div>
+                    <div className="rounded border border-console-border bg-console-surface p-2">
+                      <div className="text-ink-muted">SELECTOR MODE</div>
+                      <div className="truncate text-xs font-semibold text-signal-amber">{res.selector_name}</div>
+                    </div>
+                    <div className="rounded border border-console-border bg-console-surface p-2">
+                      <div className="text-ink-muted">LEAF SECTIONS</div>
+                      <div className="text-sm font-semibold text-ink-primary">{diag?.selected_sections_count ?? res.selected_sections.length}</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-[10px] sm:grid-cols-6">
+                    <div className="rounded border border-console-border bg-console-surface p-1.5">
+                      <span className="text-ink-muted">DENSE POOL</span>
+                      <div className="text-ink-primary font-semibold">{diag?.dense_count ?? "--"}</div>
+                    </div>
+                    <div className="rounded border border-console-border bg-console-surface p-1.5">
+                      <span className="text-ink-muted">BM25 POOL</span>
+                      <div className="text-ink-primary font-semibold">{diag?.bm25_count ?? "--"}</div>
+                    </div>
+                    <div className="rounded border border-console-border bg-console-surface p-1.5">
+                      <span className="text-ink-muted">RRF MERGED</span>
+                      <div className="text-ink-primary font-semibold">{diag?.rrf_pool_count ?? "--"}</div>
+                    </div>
+                    <div className="rounded border border-console-border bg-console-surface p-1.5">
+                      <span className="text-ink-muted">DENSE LATENCY</span>
+                      <div className="text-ink-primary">{diag?.dense_ms?.toFixed(1) ?? "--"} ms</div>
+                    </div>
+                    <div className="rounded border border-console-border bg-console-surface p-1.5">
+                      <span className="text-ink-muted">BM25 LATENCY</span>
+                      <div className="text-ink-primary">{diag?.bm25_ms?.toFixed(1) ?? "--"} ms</div>
+                    </div>
+                    <div className="rounded border border-console-border bg-console-surface p-1.5">
+                      <span className="text-ink-muted">RERANK LATENCY</span>
+                      <div className="text-ink-primary">{diag?.rerank_ms?.toFixed(1) ?? "--"} ms</div>
+                    </div>
+                  </div>
+
+                  {diag?.chunks && diag.chunks.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <div className="mb-1 text-[10px] text-ink-muted uppercase">TOP RETRIEVED CHUNKS & CROSS-ENCODER RANKINGS:</div>
+                      <table className="w-full text-left text-[10px] border border-console-border">
+                        <thead className="bg-console-surface text-ink-muted">
+                          <tr>
+                            <th className="p-1">Doc Code</th>
+                            <th className="p-1">Page</th>
+                            <th className="p-1">Dense</th>
+                            <th className="p-1">BM25</th>
+                            <th className="p-1">RRF</th>
+                            <th className="p-1">Rerank</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-console-border">
+                          {diag.chunks.map((chk, cIdx) => (
+                            <tr key={chk.chunk_id || cIdx} className="hover:bg-console-surface/50">
+                              <td className="p-1 font-semibold text-signal-amber">{chk.doc_code}</td>
+                              <td className="p-1">p.{chk.page}</td>
+                              <td className="p-1">{chk.dense.toFixed(3)}</td>
+                              <td className="p-1">{chk.bm25.toFixed(2)}</td>
+                              <td className="p-1">{chk.rrf.toFixed(4)}</td>
+                              <td className="p-1 font-semibold text-status-verified">{chk.rerank.toFixed(3)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {res.standalone_query && (
                 <div className="rounded border border-console-border bg-console-surface px-3 py-1.5 font-mono text-[11px] text-ink-secondary">
@@ -369,15 +483,47 @@ export function AssistantPage() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2.5">
-                  {res.claims.map((claim, idx) => (
-                    <ClaimBlock
-                      key={`${turn.id}-claim-${idx}`}
-                      claim={claim}
-                      activeChunkId={activeCitation?.chunk_id}
-                      onSelectCitation={handleSelectCitation}
-                    />
-                  ))}
+                <div className="space-y-3">
+                  {/* Compact Direct Answer Card */}
+                  <div className="rounded border border-console-borderStrong bg-console-surface p-4 shadow-sm">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-signal-amber font-semibold">
+                        EXECUTIVE SUMMARY & DIRECT ANSWER
+                      </span>
+                      <span className="font-mono text-[10px] text-ink-muted">
+                        GROUNDED ACROSS {res.citations.length} VERIFIED CITATIONS
+                      </span>
+                    </div>
+                    <p className="text-[13.5px] leading-relaxed text-ink-primary font-medium">
+                      {res.claims.length > 0 ? res.claims[0].claim_text : res.answer}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-1.5 border-t border-console-border/60 pt-2.5">
+                      {res.citations.slice(0, 4).map((cit, idx) => (
+                        <CitationChip
+                          key={`exec-cit-${cit.chunk_id}-${idx}`}
+                          citation={cit}
+                          isActive={activeCitation?.chunk_id === cit.chunk_id}
+                          onSelect={handleSelectCitation}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Key Verified Evidence Claims */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between font-mono text-[10px] text-ink-muted uppercase tracking-wider px-1">
+                      <span>KEY VERIFIED EVIDENCE CLAIMS ({res.claims.length})</span>
+                      <span>CLICK CHIP TO INSPECT IN VIEWER</span>
+                    </div>
+                    {res.claims.map((claim, idx) => (
+                      <ClaimBlock
+                        key={`${turn.id}-claim-${idx}`}
+                        claim={claim}
+                        activeChunkId={activeCitation?.chunk_id}
+                        onSelectCitation={handleSelectCitation}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

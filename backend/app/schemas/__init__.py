@@ -229,6 +229,36 @@ class ChatRequest(BaseModel):
     selector_mode: Optional[str] = None
 
 
+class DiagnosticChunkScore(BaseModel):
+    chunk_id: str
+    doc_code: str
+    page: int
+    dense: float = 0.0
+    bm25: float = 0.0
+    rrf: float = 0.0
+    rerank: float = 0.0
+
+
+class RetrievalDiagnosticsOut(BaseModel):
+    documents_considered: int = 0
+    tocs_scanned: int = 0
+    stair_level: str = "L1"
+    selector_name: str = "l1_passthrough"
+    selected_sections_count: int = 0
+    dense_count: int = 0
+    bm25_count: int = 0
+    rrf_pool_count: int = 0
+    dense_ms: float = 0.0
+    bm25_ms: float = 0.0
+    rerank_ms: float = 0.0
+    total_ms: float = 0.0
+    top_dense_score: float = 0.0
+    top_bm25_score: float = 0.0
+    top_rrf_score: float = 0.0
+    top_rerank_score: float = 0.0
+    chunks: list[DiagnosticChunkScore] = Field(default_factory=list)
+
+
 class ChatResponse(BaseModel):
     conversation_id: uuid.UUID
     message_id: uuid.UUID
@@ -247,6 +277,7 @@ class ChatResponse(BaseModel):
     selector_name: str = "l1_passthrough"
     selected_sections: list[SelectedSectionOut] = Field(default_factory=list)
     used_section_ids: list[uuid.UUID] = Field(default_factory=list)
+    diagnostics: Optional[RetrievalDiagnosticsOut] = None
 
 
 class EvalMethodMetrics(BaseModel):
@@ -378,6 +409,8 @@ class SimilarFailuresSearchResponse(BaseModel):
     extracted_subsystems: list[str]
     extracted_mechanisms: list[str]
     extracted_keywords: list[str]
+    risk_hypotheses: list[str] = Field(default_factory=list)
+    design_risk_summary: str = ""
     results: list[SimilarIncidentOut]
 
 

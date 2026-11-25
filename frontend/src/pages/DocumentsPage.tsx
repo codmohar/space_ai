@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ExternalLink,
   Eye,
+  Plus,
   Sparkles,
 } from "lucide-react";
 import {
@@ -13,6 +14,7 @@ import {
   type DocumentSectionNode,
   type DocumentSummary,
 } from "../api/client";
+import { AddDocumentModal } from "../components/documents/AddDocumentModal";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 
 interface TreeNode extends DocumentSectionNode {
@@ -221,19 +223,30 @@ export function DocumentsPage() {
     );
   };
 
+  const [isAddDocOpen, setIsAddDocOpen] = useState(false);
   const extractionMethod = toc?.[0]?.extraction_method || "pdf_outline";
 
   return (
     <div className="grid h-full grid-cols-12 overflow-hidden bg-console-bg">
       {/* Left: Document Corpus Table */}
       <div className="col-span-12 flex flex-col overflow-hidden border-r border-console-border lg:col-span-6">
-        <div className="border-b border-console-border bg-console-surface px-5 py-3">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-signal-amber">
-            PUBLIC MISSION ARCHIVE
-          </span>
-          <h2 className="mt-0.5 text-base font-semibold text-ink-primary">
-            Mission Document Explorer & Provenance Registry
-          </h2>
+        <div className="flex items-center justify-between border-b border-console-border bg-console-surface px-5 py-3">
+          <div>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-signal-amber">
+              PUBLIC MISSION ARCHIVE
+            </span>
+            <h2 className="mt-0.5 text-base font-semibold text-ink-primary">
+              Mission Document Explorer & Provenance Registry
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsAddDocOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded border border-signal-amber bg-signal-amber px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wider text-console-base hover:bg-signal-amber/90"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Document
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
@@ -366,6 +379,11 @@ export function DocumentsPage() {
           )}
         </div>
       </div>
+
+      <AddDocumentModal
+        isOpen={isAddDocOpen}
+        onClose={() => setIsAddDocOpen(false)}
+      />
     </div>
   );
 }

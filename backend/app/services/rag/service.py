@@ -325,11 +325,17 @@ class RAGService:
             )
             history = [(m.role, m.content) for m in all_msgs[-6:]]
 
+        # Dynamic mission names from database
+        db_missions = list(
+            db.execute(select(Document.mission).distinct()).scalars().all()
+        )
+
         rewritten = rewrite_followup_query(
             query=query,
             history=history,
             mission_scope=mission or conv.mission_scope,
             conversation_summary=conv.summary,
+            known_missions=db_missions,
             llm_client=self._llm_client,
         )
 

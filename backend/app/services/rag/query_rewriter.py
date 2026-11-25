@@ -54,9 +54,10 @@ def detect_response_style(query: str) -> ResponseStyle:
     return "simpler" if _SIMPLER_PATTERN.search(query) else "standard"
 
 
-def _extract_mission_from_text(text: str) -> Optional[str]:
+def _extract_mission_from_text(text: str, known_missions: Optional[Sequence[str]] = None) -> Optional[str]:
     lower = text.lower()
-    for mission in _KNOWN_MISSIONS:
+    candidates = list(known_missions) if known_missions else list(_KNOWN_MISSIONS)
+    for mission in candidates:
         if mission.lower() in lower:
             return mission
     return None
@@ -116,6 +117,7 @@ def rewrite_followup_query(
     history: Sequence[tuple[str, str]],
     mission_scope: Optional[str] = None,
     conversation_summary: Optional[str] = None,
+    known_missions: Optional[Sequence[str]] = None,
     llm_client: Optional[LLMClient] = None,
 ) -> RewriteResult:
     """Resolve follow-up queries ('what was the initial issue?', 'explain simpler') into a standalone question."""
@@ -126,7 +128,7 @@ def rewrite_followup_query(
         return RewriteResult(
             original_query=clean_query,
             standalone_query=clean_query,
-            resolved_mission=mission_scope or _extract_mission_from_text(clean_query),
+            resolved_mission=mission_scope or _extract_mission_from_text(clean_query, known_missions),
             response_style=style,
             was_rewritten=False,
         )

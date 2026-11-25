@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     min_rerank_score_threshold: float = 0.18
     min_rrf_score_threshold: float = 0.012
     prompt_version: str = "rag-v1.0"
+    open_query_retrieval: bool = True
+    doc_upload_enabled: bool = True
 
     # STAIR Section Selection & Evaluation
     section_selector_mode: str = "auto"  # auto | l1_passthrough | bm25_toc | stair_l2 | stair_l3
