@@ -221,6 +221,7 @@ class IngestionPipeline:
                     page_start=sec.page_start,
                     page_end=sec.page_end,
                     order_index=sec.order_index,
+                    extraction_method=sec.extraction_method,
                 )
             )
         db.flush()

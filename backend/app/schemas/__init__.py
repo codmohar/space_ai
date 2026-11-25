@@ -55,6 +55,7 @@ class DocumentSectionNode(BaseModel):
     page_start: int
     page_end: int
     order_index: int
+    extraction_method: str = "pdf_outline"
 
 
 class PageChunkView(BaseModel):
@@ -158,11 +159,44 @@ class ClaimOut(BaseModel):
     citations: list[CitationOut]
 
 
+class SelectedSectionOut(BaseModel):
+    section_id: uuid.UUID
+    document_id: uuid.UUID
+    doc_code: str
+    section_path: str
+    title: str
+    page_start: int
+    page_end: int
+    reason: str = ""
+
+
+class STAIRRetrieveRequest(BaseModel):
+    query: str = Field(..., min_length=2, max_length=2000)
+    mission: Optional[str] = None
+    document_ids: Optional[list[uuid.UUID]] = None
+    selector_mode: str = Field(default="auto")  # auto | l1_passthrough | bm25_toc | stair_l2 | stair_l3
+    top_k_sections: int = Field(default=6, ge=1, le=20)
+    top_k_chunks: int = Field(default=6, ge=1, le=20)
+
+
+class STAIRRetrieveResponse(BaseModel):
+    request_id: str
+    stair_level: str
+    selector_name: str
+    invalid_ids_count: int = 0
+    used_fallback: bool = False
+    stub_not_trained: bool = False
+    selected_sections: list[SelectedSectionOut]
+    results: list[RetrievedChunkOut]
+    latency_ms: float
+
+
 class ChatRequest(BaseModel):
     query: str = Field(..., min_length=2, max_length=2000)
     conversation_id: Optional[uuid.UUID] = None
     mission: Optional[str] = None
     document_ids: Optional[list[uuid.UUID]] = None
+    selector_mode: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -177,6 +211,33 @@ class ChatResponse(BaseModel):
     evidence_classification: EvidenceClassification
     abstained: bool
     stair_level: str
+    selector_name: str = "l1_passthrough"
+    selected_sections: list[SelectedSectionOut] = Field(default_factory=list)
+    used_section_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class EvalMethodMetrics(BaseModel):
+    method: str
+    stair_level: str
+    evaluated_questions: int
+    recall_at_1: float
+    recall_at_3: float
+    recall_at_5: float
+    mrr: float
+    ndcg_at_5: float
+    invalid_section_rate: float
+    avg_latency_ms: float
+    p95_latency_ms: float
+
+
+class EvalResultsResponse(BaseModel):
+    status: str  # "Not yet evaluated" | "evaluated"
+    generated_at: Optional[str] = None
+    dataset_path: Optional[str] = None
+    total_questions: int = 0
+    answerable_questions: int = 0
+    unanswerable_questions: int = 0
+    methods: list[EvalMethodMetrics] = Field(default_factory=list)
 
 
 class CorpusStatsResponse(BaseModel):

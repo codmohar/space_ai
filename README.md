@@ -31,9 +31,16 @@ Team: **ProtoGuys**
 ## Honest STAIR Implementation Status
 
 MISSIONWISE ships STAIR-style structure-aware retrieval incrementally and labels every level honestly:
-- **L1 (Phase 1 — Active):** Hierarchical document section index (`document_sections` from ToC + font-size heuristics) with modular `SectionSelector` interface.
-- **L2 (Phase 2 — Planned):** ToC-aware query-to-leaf selection (STAIR-inspired).
-- **L3/L4 (Phase 3+ — Planned):** Fine-tuned LoRA ToC+query → leaf ID selector, constrained decoding, and benchmark evaluation.
+- **L1 (Active):** Hierarchical document section index (`document_sections` with `is_leaf` and 3-tier ToC extraction: PDF outline -> font/numbering heuristics -> LLM repair) + `BM25ToCSectionSelector` baseline.
+- **L2 (Active — Phase 2):** ToC-aware query-to-leaf selection (`STAIRInspiredSectionSelector`) returning validated leaf section IDs via `POST /api/stair/retrieve`, with Document Explorer ToC tree highlighting.
+- **L3 / L4 (Optional GPU Training — Phase 2):** `scripts/generate_training_data.py` + `scripts/train_stair.py` (LoRA fine-tuning + constrained leaf-ID decoding for free Colab/Kaggle GPUs; see [docs/stair_training.md](docs/stair_training.md)), wired behind `FineTunedSTAIRSectionSelector`.
+
+## Evaluation (Phase 2)
+Run the retrieval benchmark across `data/evaluation/questions.jsonl` (42 questions including 10 unanswerable):
+```bash
+python scripts/evaluate_retrieval.py --questions data/evaluation/questions.jsonl
+```
+Results are saved to `data/evaluation/retrieval_results.json` and served by `GET /api/eval/results` to the Evaluation page. Until executed, the UI displays `"Not yet evaluated"`.
 
 ---
 

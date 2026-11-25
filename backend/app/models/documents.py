@@ -95,6 +95,9 @@ class DocumentSection(Base):
     page_start: Mapped[int] = mapped_column(Integer, nullable=False)
     page_end: Mapped[int] = mapped_column(Integer, nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    extraction_method: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="pdf_outline"
+    )  # pdf_outline | font_heuristic | llm_repair
 
     document: Mapped["Document"] = relationship(back_populates="sections")
     chunks: Mapped[list["DocumentChunk"]] = relationship(back_populates="section")

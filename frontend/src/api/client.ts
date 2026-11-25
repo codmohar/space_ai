@@ -38,6 +38,17 @@ export interface ClaimOut {
   citations: CitationOut[];
 }
 
+export interface SelectedSectionOut {
+  section_id: string;
+  document_id: string;
+  doc_code: string;
+  section_path: string;
+  title: string;
+  page_start: number;
+  page_end: number;
+  reason: string;
+}
+
 export interface ChatResponse {
   conversation_id: string;
   message_id: string;
@@ -50,6 +61,9 @@ export interface ChatResponse {
   evidence_classification: EvidenceClassification;
   abstained: boolean;
   stair_level: string;
+  selector_name: string;
+  selected_sections: SelectedSectionOut[];
+  used_section_ids: string[];
 }
 
 export interface DocumentSummary {
@@ -78,6 +92,31 @@ export interface DocumentSectionNode {
   page_start: number;
   page_end: number;
   order_index: number;
+  extraction_method: string;
+}
+
+export interface EvalMethodMetrics {
+  method: string;
+  stair_level: string;
+  evaluated_questions: number;
+  recall_at_1: number;
+  recall_at_3: number;
+  recall_at_5: number;
+  mrr: number;
+  ndcg_at_5: number;
+  invalid_section_rate: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+}
+
+export interface EvalResultsResponse {
+  status: string;
+  generated_at?: string | null;
+  dataset_path?: string | null;
+  total_questions: number;
+  answerable_questions: number;
+  unanswerable_questions: number;
+  methods: EvalMethodMetrics[];
 }
 
 export interface HealthResponse {
@@ -130,10 +169,12 @@ export const api = {
   listDocuments: () => apiFetch<DocumentSummary[]>("/api/documents"),
   getDocumentToc: (docId: string) =>
     apiFetch<DocumentSectionNode[]>(`/api/documents/${docId}/toc`),
+  evalResults: () => apiFetch<EvalResultsResponse>("/api/eval/results"),
   chat: (payload: {
     query: string;
     conversation_id?: string | null;
     mission?: string | null;
+    selector_mode?: string | null;
   }) =>
     apiFetch<ChatResponse>("/api/chat", {
       method: "POST",

@@ -159,6 +159,7 @@ def get_document_toc(
             page_start=s.page_start,
             page_end=s.page_end,
             order_index=s.order_index,
+            extraction_method=s.extraction_method,
         )
         for s in sections
     ]

@@ -30,6 +30,8 @@ class StairTrainingPair(Base):
     query_text: Mapped[str] = mapped_column(Text, nullable=False)
     toc_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     split: Mapped[str] = mapped_column(String(32), nullable=False, default="train")
+    reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reviewer_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
 

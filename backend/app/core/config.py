@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     min_rrf_score_threshold: float = 0.012
     prompt_version: str = "rag-v1.0"
 
+    # STAIR Section Selection & Evaluation
+    section_selector_mode: str = "auto"  # auto | l1_passthrough | bm25_toc | stair_l2 | stair_l3
+    stair_top_k_sections: int = 6
+    stair_lora_adapter_path: str = ""
+    stair_base_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
+    eval_results_path: Path = Path("../data/evaluation/retrieval_results.json")
+
     # Security & CORS
     jwt_secret_key: str = "change-me-in-production-32-chars-min"
     cors_origins: str = "http://localhost:5173,http://localhost:3000"

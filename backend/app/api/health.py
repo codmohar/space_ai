@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from app.api.eval import load_eval_results
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.documents import Document, DocumentChunk, DocumentSection
@@ -53,11 +54,13 @@ def corpus_stats(db: Session = Depends(get_db)) -> CorpusStatsResponse:
     ).scalar_one()
     log_count = db.execute(select(func.count(RetrievalLog.id))).scalar_one()
 
+    eval_res = load_eval_results()
+
     return CorpusStatsResponse(
         document_count=int(doc_count),
         section_count=int(sec_count),
         chunk_count=int(chk_count),
         ocr_chunk_count=int(ocr_count),
         retrieval_log_count=int(log_count),
-        evaluation_status="Not yet evaluated",
+        evaluation_status=eval_res.status,
     )

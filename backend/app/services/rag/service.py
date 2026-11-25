@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from app.core.config import ABSTENTION_MESSAGE, get_settings
 from app.models.rag import Citation, Conversation, Message
-from app.schemas import ChatResponse, ClaimOut, EvidenceClassification
+from app.schemas import ChatResponse, ClaimOut, EvidenceClassification, SelectedSectionOut
 from app.services.llm.client import LLMClient, get_llm_client
 from app.services.rag.citation_validator import (
     LLMRAGOutput,
@@ -20,6 +20,7 @@ from app.services.rag.confidence import compute_retrieval_confidence
 from app.services.rag.prompt_guard import GROUNDED_SYSTEM_PROMPT, build_grounded_user_prompt
 from app.services.retrieval.hybrid import HybridRetriever, RetrievedCandidate
 from app.services.retrieval.logger import record_retrieval_log
+from app.services.retrieval.section_selector import build_section_selector
 
 
 @dataclass
@@ -33,6 +34,9 @@ class RAGExecutionResult:
     abstained: bool
     stair_level: str
     retrieval_log_id: uuid.UUID
+    selector_name: str = "l1_passthrough"
+    selected_sections: list[SelectedSectionOut] = field(default_factory=list)
+    used_section_ids: list[uuid.UUID] = field(default_factory=list)
 
 
 class RAGService:
@@ -42,11 +46,17 @@ class RAGService:
         llm_client: LLMClient | None = None,
     ) -> None:
         self.settings = get_settings()
-        self.retriever = retriever or HybridRetriever()
+        self.retriever = retriever
         self._llm_client = llm_client
 
     def _get_llm(self) -> LLMClient:
         return self._llm_client or get_llm_client()
+
+    def _get_retriever(self, selector_mode: Optional[str] = None) -> HybridRetriever:
+        if self.retriever is not None and not selector_mode:
+            return self.retriever
+        selector = build_section_selector(mode=selector_mode, llm_client=self._llm_client)
+        return HybridRetriever(section_selector=selector)
 
     def answer_query(
         self,
@@ -55,13 +65,30 @@ class RAGService:
         request_id: str,
         mission: Optional[str] = None,
         document_ids: Optional[list[uuid.UUID]] = None,
+        selector_mode: Optional[str] = None,
     ) -> RAGExecutionResult:
-        candidates, telemetry = self.retriever.search(
+        retriever = self._get_retriever(selector_mode)
+        candidates, telemetry = retriever.search(
             db=db,
             query=query,
             mission=mission,
             document_ids=document_ids,
         )
+
+        selected_sections = [
+            SelectedSectionOut(
+                section_id=uuid.UUID(s["section_id"]),
+                document_id=uuid.UUID(s["document_id"]),
+                doc_code=s["doc_code"],
+                section_path=s["section_path"],
+                title=s["title"],
+                page_start=s["page_start"],
+                page_end=s["page_end"],
+                reason=s.get("reason", ""),
+            )
+            for s in telemetry.get("selected_sections", [])
+        ]
+        selector_name = telemetry.get("selector_name", "l1_passthrough")
 
         top_rerank = telemetry.get("top_rerank_score", 0.0)
         top_rrf = telemetry.get("top_rrf_score", 0.0)
@@ -93,6 +120,9 @@ class RAGService:
                 abstained=True,
                 stair_level=telemetry.get("stair_level", "L1"),
                 retrieval_log_id=log.id,
+                selector_name=selector_name,
+                selected_sections=selected_sections,
+                used_section_ids=[],
             )
 
         llm = self._get_llm()
@@ -125,11 +155,13 @@ class RAGService:
                 abstained=True,
                 stair_level=telemetry.get("stair_level", "L1"),
                 retrieval_log_id=log.id,
+                selector_name=selector_name,
+                selected_sections=selected_sections,
+                used_section_ids=[],
             )
 
         validation = validate_and_filter_claims(llm_out, candidates, db=db)
 
-        # Regenerate once if all claims failed citation validation
         if validation.needs_regeneration:
             retry_prompt = build_grounded_user_prompt(query, candidates, strict_retry=True)
             llm_out_retry = llm.generate_structured(
@@ -142,7 +174,6 @@ class RAGService:
                 validation = validate_and_filter_claims(llm_out_retry, candidates, db=db)
                 llm_out = llm_out_retry
 
-        # If still no verified claims survive, abstain strictly
         if not validation.verified_claims:
             log = record_retrieval_log(
                 db=db,
@@ -164,6 +195,9 @@ class RAGService:
                 abstained=True,
                 stair_level=telemetry.get("stair_level", "L1"),
                 retrieval_log_id=log.id,
+                selector_name=selector_name,
+                selected_sections=selected_sections,
+                used_section_ids=[],
             )
 
         cand_score_map: dict[uuid.UUID, RetrievedCandidate] = {c.chunk_id: c for c in candidates}
@@ -184,7 +218,6 @@ class RAGService:
             min_rerank_threshold=self.settings.min_rerank_score_threshold,
         )
 
-        # Format deterministic answer with inline citation chips
         answer_lines: list[str] = []
         for claim in validation.verified_claims:
             chips = " ".join(
@@ -195,6 +228,13 @@ class RAGService:
         answer_text = "\n\n".join(answer_lines)
 
         dominant_class = _dominant_classification(validation.verified_claims)
+        used_sec_ids = list(
+            dict.fromkeys(
+                cit.section_id
+                for cit in validation.verified_citations
+                if cit.section_id is not None
+            )
+        )
 
         log = record_retrieval_log(
             db=db,
@@ -222,6 +262,9 @@ class RAGService:
             abstained=False,
             stair_level=telemetry.get("stair_level", "L1"),
             retrieval_log_id=log.id,
+            selector_name=selector_name,
+            selected_sections=selected_sections,
+            used_section_ids=used_sec_ids,
         )
 
     def chat_and_persist(
@@ -232,6 +275,7 @@ class RAGService:
         conversation_id: Optional[uuid.UUID] = None,
         mission: Optional[str] = None,
         document_ids: Optional[list[uuid.UUID]] = None,
+        selector_mode: Optional[str] = None,
     ) -> ChatResponse:
         conv: Conversation | None = None
         if conversation_id is not None:
@@ -259,6 +303,7 @@ class RAGService:
             request_id=request_id,
             mission=mission,
             document_ids=document_ids,
+            selector_mode=selector_mode,
         )
 
         assistant_msg = Message(
@@ -307,6 +352,9 @@ class RAGService:
             evidence_classification=rag_res.evidence_classification,
             abstained=rag_res.abstained,
             stair_level=rag_res.stair_level,
+            selector_name=rag_res.selector_name,
+            selected_sections=rag_res.selected_sections,
+            used_section_ids=rag_res.used_section_ids,
         )
 
 

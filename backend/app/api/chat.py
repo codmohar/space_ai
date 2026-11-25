@@ -27,4 +27,5 @@ def chat_endpoint(
         conversation_id=req.conversation_id,
         mission=req.mission,
         document_ids=req.document_ids,
+        selector_mode=req.selector_mode,
     )

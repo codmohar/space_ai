@@ -24,9 +24,9 @@ const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Mission Control", code: "SYS-01", icon: LayoutDashboard },
   { id: "assistant", label: "Research Assistant", code: "RAG-02", icon: FileSearch },
   { id: "documents", label: "Document Explorer", code: "DOC-03", icon: BookOpen },
-  { id: "failures", label: "Failure Chains", code: "FCR-04", icon: GitBranch, phaseTag: "P2" },
-  { id: "similar", label: "Similar Incidents", code: "SIM-05", icon: Layers, phaseTag: "P2" },
-  { id: "evaluation", label: "Evaluation", code: "EVL-06", icon: Activity, phaseTag: "P2" },
+  { id: "failures", label: "Failure Chains", code: "FCR-04", icon: GitBranch, phaseTag: "P3" },
+  { id: "similar", label: "Similar Incidents", code: "SIM-05", icon: Layers, phaseTag: "P3" },
+  { id: "evaluation", label: "Evaluation", code: "EVL-06", icon: Activity },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -119,7 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="mt-2 space-y-1 font-mono text-[11px] text-ink-secondary tabular-nums">
             <div className="flex justify-between">
               <span className="text-ink-muted">STAIR</span>
-              <span>L1 Index</span>
+              <span>L1 / L2 Ready</span>
             </div>
             <div className="flex justify-between">
               <span className="text-ink-muted">PGVECTOR</span>

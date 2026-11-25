@@ -2,6 +2,7 @@ import { AppShell } from "./components/layout/AppShell";
 import { AssistantPage } from "./pages/AssistantPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
+import { EvaluationPage } from "./pages/EvaluationPage";
 import { PhasePlaceholderPage } from "./pages/PhasePlaceholderPage";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 
@@ -27,13 +28,7 @@ export default function App() {
           description="Engineering relevance matching across subsystems, anomalies, root causes, and corrective actions using the shared retrieval pipeline."
         />
       )}
-      {activeRoute === "evaluation" && (
-        <PhasePlaceholderPage
-          code="EVL-06"
-          title="Evaluation Dashboard"
-          description="Displays measured metrics strictly produced by scripts in /scripts (BM25 vs Dense vs Hybrid vs STAIR L2/L3, RAG faithfulness, abstention accuracy). Currently: Not yet evaluated."
-        />
-      )}
+      {activeRoute === "evaluation" && <EvaluationPage />}
     </AppShell>
   );
 }

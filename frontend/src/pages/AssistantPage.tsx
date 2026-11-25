@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, RotateCcw, Send } from "lucide-react";
+import { AlertTriangle, BookOpen, RotateCcw, Send } from "lucide-react";
 import { api, type CitationOut } from "../api/client";
 import { ClaimBlock } from "../components/chat/ClaimBlock";
 import { ConfidenceMeter } from "../components/chat/ConfidenceMeter";
@@ -12,7 +12,7 @@ const SUGGESTED_QUERIES = [
   "What was the root cause of the Mars Climate Orbiter loss?",
   "What triggered the Apollo 13 oxygen tank No. 2 failure?",
   "What was the most probable cause of the Mars Polar Lander failure?",
-  "What caused the James Webb Space Telescope mirror test failure?", // Unanswerable test query
+  "What caused the James Webb Space Telescope mirror test failure?",
 ];
 
 export function AssistantPage() {
@@ -22,6 +22,8 @@ export function AssistantPage() {
   const {
     selectedMission,
     setSelectedMission,
+    selectorMode,
+    setSelectorMode,
     conversationId,
     setConversationId,
     turns,
@@ -29,6 +31,8 @@ export function AssistantPage() {
     clearTurns,
     activeCitation,
     setActiveCitation,
+    setHighlightedSections,
+    setActiveRoute,
     splitRatio,
     setSplitRatio,
   } = useWorkspaceStore();
@@ -61,6 +65,7 @@ export function AssistantPage() {
         query,
         conversation_id: conversationId,
         mission: selectedMission || null,
+        selector_mode: selectorMode,
       }),
     onSuccess: (data) => {
       setConversationId(data.conversation_id);
@@ -72,6 +77,17 @@ export function AssistantPage() {
       if (data.citations.length > 0) {
         setActiveCitation(data.citations[0]);
       }
+      const allSecIds = Array.from(
+        new Set([
+          ...(data.used_section_ids || []),
+          ...(data.selected_sections || []).map((s) => s.section_id),
+        ])
+      );
+      const docId =
+        data.citations[0]?.document_id ||
+        data.selected_sections[0]?.document_id ||
+        null;
+      setHighlightedSections(allSecIds, docId);
     },
     onError: (err: Error) => {
       addTurn({
@@ -101,32 +117,62 @@ export function AssistantPage() {
 
   const handleSelectCitation = (cit: CitationOut) => {
     setActiveCitation(cit);
+    if (cit.section_id) {
+      setHighlightedSections([cit.section_id], cit.document_id);
+    }
+  };
+
+  const inspectSectionInToc = (sectionIds: string[], documentId: string) => {
+    setHighlightedSections(sectionIds, documentId);
+    setActiveRoute("documents");
   };
 
   const assistantPane = (
     <div className="flex h-full flex-col bg-console-bg">
-      {/* Scope & Reset Toolbar */}
-      <div className="flex items-center justify-between border-b border-console-border bg-console-surface px-4 py-2">
-        <div className="flex items-center gap-2">
-          <label
-            htmlFor="mission-scope"
-            className="font-mono text-[10px] uppercase tracking-wider text-ink-muted"
-          >
-            MISSION SCOPE
-          </label>
-          <select
-            id="mission-scope"
-            value={selectedMission}
-            onChange={(e) => setSelectedMission(e.target.value)}
-            className="rounded border border-console-borderStrong bg-console-bg px-2 py-1 font-mono text-xs text-ink-primary focus:border-signal-amber focus:outline-none"
-          >
-            <option value="">All Seeded Reports</option>
-            {missions.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+      {/* Scope, STAIR Selector Mode & Reset Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-console-border bg-console-surface px-4 py-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="mission-scope"
+              className="font-mono text-[10px] uppercase tracking-wider text-ink-muted"
+            >
+              MISSION
+            </label>
+            <select
+              id="mission-scope"
+              value={selectedMission}
+              onChange={(e) => setSelectedMission(e.target.value)}
+              className="rounded border border-console-borderStrong bg-console-bg px-2 py-1 font-mono text-xs text-ink-primary focus:border-signal-amber focus:outline-none"
+            >
+              <option value="">All Seeded Reports</option>
+              {missions.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="stair-selector"
+              className="font-mono text-[10px] uppercase tracking-wider text-ink-muted"
+            >
+              TOC SELECTOR
+            </label>
+            <select
+              id="stair-selector"
+              value={selectorMode}
+              onChange={(e) => setSelectorMode(e.target.value)}
+              className="rounded border border-console-borderStrong bg-console-bg px-2 py-1 font-mono text-xs text-ink-primary focus:border-signal-amber focus:outline-none"
+            >
+              <option value="auto">Auto (L2 STAIR / BM25-ToC)</option>
+              <option value="stair_l2">L2 STAIR-Inspired (ToC-&gt;Leaf)</option>
+              <option value="bm25_toc">L1 BM25-over-ToC</option>
+              <option value="l1_passthrough">L1 Full-Doc Hybrid</option>
+            </select>
+          </div>
         </div>
 
         <button
@@ -150,8 +196,8 @@ export function AssistantPage() {
               Ask an engineering question across ingested mission reports
             </h3>
             <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
-              Every claim is validated against stored chunks and page bounding boxes.
-              Out-of-corpus queries automatically trigger abstention.
+              ToC leaf-section selection narrows retrieval before hybrid ranking and
+              pre-response citation validation. Out-of-corpus queries trigger abstention.
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2">
               {SUGGESTED_QUERIES.map((q) => (
@@ -197,13 +243,70 @@ export function AssistantPage() {
           }
 
           const res = turn.response!;
+          const uniqueUsedSections = new Map<
+            string,
+            { sectionId: string; documentId: string; label: string }
+          >();
+          for (const sec of res.selected_sections || []) {
+            uniqueUsedSections.set(sec.section_id, {
+              sectionId: sec.section_id,
+              documentId: sec.document_id,
+              label: `${sec.doc_code} · §${sec.section_path} ${sec.title} (p.${sec.page_start})`,
+            });
+          }
+          for (const cit of res.citations || []) {
+            if (cit.section_id && !uniqueUsedSections.has(cit.section_id)) {
+              uniqueUsedSections.set(cit.section_id, {
+                sectionId: cit.section_id,
+                documentId: cit.document_id,
+                label: `${cit.doc_code} · ${cit.section} (p.${cit.page_number})`,
+              });
+            }
+          }
+
           return (
             <div key={turn.id} className="space-y-3">
               <ConfidenceMeter
                 category={res.confidence}
                 score={res.confidence_score}
-                stairLevel={res.stair_level}
+                stairLevel={`${res.stair_level} (${res.selector_name})`}
               />
+
+              {/* Highlighted ToC Sections Used for This Answer */}
+              {uniqueUsedSections.size > 0 && (
+                <div className="rounded border border-signal-amber/35 bg-signal-amberDim/50 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-signal-amber">
+                      <BookOpen className="h-3.5 w-3.5" />
+                      SECTIONS USED FOR THIS ANSWER ({uniqueUsedSections.size})
+                    </span>
+                    <span className="font-mono text-[10px] text-ink-secondary">
+                      Click to highlight in Document Explorer ToC Tree
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {Array.from(uniqueUsedSections.values()).map((sec) => {
+                      const isCited = (res.used_section_ids || []).includes(sec.sectionId);
+                      return (
+                        <button
+                          key={sec.sectionId}
+                          type="button"
+                          onClick={() =>
+                            inspectSectionInToc([sec.sectionId], sec.documentId)
+                          }
+                          className={`rounded border px-2 py-0.5 font-mono text-[11px] transition-colors ${
+                            isCited
+                              ? "border-signal-amber bg-console-surface text-signal-amber hover:bg-signal-amber hover:text-console-base"
+                              : "border-console-borderStrong bg-console-surface text-ink-secondary hover:border-signal-amber"
+                          }`}
+                        >
+                          {sec.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {res.abstained ? (
                 <div className="rounded border border-status-insufficient/40 bg-console-surface p-3.5">
@@ -236,7 +339,7 @@ export function AssistantPage() {
             <div className="h-3 w-40 animate-pulse rounded bg-console-elevated" />
             <div className="h-14 w-full animate-pulse rounded bg-console-elevated" />
             <span className="block font-mono text-[11px] text-ink-muted">
-              Running hybrid retrieval (dense + BM25 + RRF + reranker) & citation validation...
+              Selecting ToC leaf sections, running hybrid retrieval & citation validation...
             </span>
           </div>
         )}

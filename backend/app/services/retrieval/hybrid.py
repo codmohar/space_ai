@@ -24,8 +24,8 @@ from app.models.documents import (
 )
 from app.services.retrieval.embeddings import get_embedding_service
 from app.services.retrieval.section_selector import (
-    L1PassThroughSectionSelector,
     SectionSelector,
+    build_section_selector,
 )
 
 
@@ -87,7 +87,7 @@ def get_reranker() -> CrossEncoderReranker:
 class HybridRetriever:
     def __init__(self, section_selector: SectionSelector | None = None) -> None:
         self.settings = get_settings()
-        self.section_selector = section_selector or L1PassThroughSectionSelector()
+        self.section_selector = section_selector or build_section_selector()
 
     def search(
         self,
@@ -109,9 +109,13 @@ class HybridRetriever:
             if mission_docs:
                 scoped_doc_ids = list(mission_docs)
 
-        selected_section_ids = self.section_selector.select_sections(
-            db=db, query=query, document_ids=scoped_doc_ids
+        selection_res = self.section_selector.select(
+            db=db,
+            query=query,
+            document_ids=scoped_doc_ids,
+            top_k_sections=self.settings.stair_top_k_sections,
         )
+        selected_section_ids = selection_res.selected_section_ids
 
         # 1. Dense vector search (pgvector cosine similarity)
         t_dense_start = time.perf_counter()
@@ -230,7 +234,23 @@ class HybridRetriever:
         total_ms = (time.perf_counter() - t0) * 1000.0
 
         telemetry = {
-            "stair_level": self.section_selector.stair_level,
+            "stair_level": selection_res.stair_level,
+            "selector_name": selection_res.selector_name,
+            "invalid_section_ids_count": selection_res.invalid_ids_count,
+            "used_selector_fallback": selection_res.used_fallback,
+            "selected_sections": [
+                {
+                    "section_id": str(m.section_id),
+                    "document_id": str(m.document_id),
+                    "doc_code": m.doc_code,
+                    "section_path": m.section_path,
+                    "title": m.title,
+                    "page_start": m.page_start,
+                    "page_end": m.page_end,
+                    "reason": m.reason,
+                }
+                for m in selection_res.selected_sections
+            ],
             "selected_section_ids": [str(s) for s in selected_section_ids]
             if selected_section_ids
             else None,
