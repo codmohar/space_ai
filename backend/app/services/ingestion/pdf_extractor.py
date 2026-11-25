@@ -139,7 +139,7 @@ def _extract_native_blocks(page: fitz.Page, page_number: int) -> list[ExtractedB
             if line_joined:
                 lines_text.append(line_joined)
 
-        full_text = "\n".join(lines_text).strip()
+        full_text = "\n".join(lines_text).replace("\x00", "").strip()
         if not full_text:
             continue
         x0, y0, x1, y1 = [round(float(v), 2) for v in blk.get("bbox", (0, 0, width, height))]
@@ -266,7 +266,7 @@ def _finalize_hierarchy(
 
     for idx, (raw_level, raw_title, raw_page) in enumerate(entries):
         level = max(1, min(4, int(raw_level)))
-        title = raw_title.strip() or f"Section {idx + 1}"
+        title = raw_title.replace("\x00", "").strip() or f"Section {idx + 1}"
         page_start = max(1, min(max(1, page_count), int(raw_page)))
 
         while parent_stack and parent_stack[-1][0] >= level:

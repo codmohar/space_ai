@@ -34,6 +34,7 @@ import {
 } from "../components/failures/FailureEventNode";
 import { CitationViewer } from "../components/viewer/CitationViewer";
 import { useVoiceAssistant } from "../hooks/useVoiceAssistant";
+import { useWorkspaceStore } from "../stores/workspaceStore";
 import { designTokens } from "../styles/design-tokens";
 
 type EdgeFilter = "all" | "causal" | "chronology";
@@ -55,6 +56,9 @@ export function FailureChainPage() {
     null
   );
 
+  const failureChainDocId = useWorkspaceStore((s) => s.failureChainDocId);
+  const setFailureChainDocId = useWorkspaceStore((s) => s.setFailureChainDocId);
+
   const { data: docs } = useQuery({
     queryKey: ["documents"],
     queryFn: api.listDocuments,
@@ -73,10 +77,18 @@ export function FailureChainPage() {
   }, [docs, missionQuery]);
 
   useEffect(() => {
+    if (failureChainDocId && docs) {
+      const target = docs.find((d) => d.id === failureChainDocId);
+      if (target) {
+        setSelectedDoc(target);
+        setFailureChainDocId(null);
+        return;
+      }
+    }
     if (!selectedDoc && filteredDocs.length > 0) {
       setSelectedDoc(filteredDocs[0]);
     }
-  }, [filteredDocs, selectedDoc]);
+  }, [docs, failureChainDocId, filteredDocs, selectedDoc, setFailureChainDocId]);
 
   const eventsQuery = useQuery({
     queryKey: ["failure-events", selectedDoc?.id],

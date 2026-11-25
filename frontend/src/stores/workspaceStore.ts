@@ -7,6 +7,7 @@ export type NavRoute =
   | "documents"
   | "failures"
   | "similar"
+  | "kg"
   | "evaluation";
 
 export interface ChatTurn {
@@ -40,6 +41,9 @@ interface WorkspaceState {
   highlightedSectionIds: string[];
   highlightedDocumentId: string | null;
   setHighlightedSections: (sectionIds: string[], documentId?: string | null) => void;
+
+  failureChainDocId: string | null;
+  setFailureChainDocId: (docId: string | null) => void;
 
   splitRatio: number;
   setSplitRatio: (ratio: number) => void;
@@ -76,6 +80,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   highlightedDocumentId: null,
   setHighlightedSections: (highlightedSectionIds, highlightedDocumentId = null) =>
     set({ highlightedSectionIds, highlightedDocumentId }),
+
+  failureChainDocId: null,
+  setFailureChainDocId: (failureChainDocId) => set({ failureChainDocId }),
 
   splitRatio: 52,
   setSplitRatio: (splitRatio) =>

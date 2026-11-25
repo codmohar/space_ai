@@ -7,6 +7,7 @@ import {
   GitBranch,
   Layers,
   LayoutDashboard,
+  Network,
   ShieldAlert,
 } from "lucide-react";
 import { api } from "../../api/client";
@@ -25,7 +26,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: "assistant", label: "Research Assistant", code: "RAG-02", icon: FileSearch },
   { id: "documents", label: "Document Explorer", code: "DOC-03", icon: BookOpen },
   { id: "failures", label: "Failure Chains", code: "FCR-04", icon: GitBranch },
-  { id: "similar", label: "Similar Incidents", code: "SIM-05", icon: Layers, phaseTag: "P5" },
+  { id: "similar", label: "Similar Incidents", code: "SIM-05", icon: Layers },
+  { id: "kg", label: "Knowledge Graph", code: "KG-07", icon: Network },
   { id: "evaluation", label: "Evaluation", code: "EVL-06", icon: Activity },
 ];
 

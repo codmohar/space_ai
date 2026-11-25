@@ -302,6 +302,125 @@ class FailureChainResponse(BaseModel):
     verified_relationships: int
 
 
+class SimilarFailuresSearchRequest(BaseModel):
+    problem_description: str = Field(..., min_length=4, max_length=2000)
+    mission: Optional[str] = None
+    top_k: int = Field(default=6, ge=1, le=20)
+    auto_index_if_empty: bool = True
+
+
+class RelevanceBreakdown(BaseModel):
+    semantic_score: float
+    keyword_score: float
+    rerank_score: float
+    subsystem_match_score: float
+    matched_terms: list[str]
+    total_relevance: float
+
+
+class SimilarIncidentOut(BaseModel):
+    incident_id: uuid.UUID
+    mission: str
+    subsystem: str
+    component: Optional[str] = None
+    anomaly_title: str
+    anomaly_description: str
+    root_cause: str
+    consequence: str
+    corrective_action: str
+    failure_mechanism: Optional[str] = None
+    evidence_classification: EvidenceClassification
+    verification_status: Literal["pending", "verified", "rejected"]
+    document_id: uuid.UUID
+    doc_code: str
+    document_title: str
+    source_url: str
+    licence: str
+    section: str
+    page_number: int
+    chunk_id: uuid.UUID
+    evidence_text: str
+    bbox_json: list[BBoxItem] = Field(default_factory=list)
+    relevance: RelevanceBreakdown
+
+
+class SimilarFailuresSearchResponse(BaseModel):
+    extracted_subsystems: list[str]
+    extracted_mechanisms: list[str]
+    extracted_keywords: list[str]
+    results: list[SimilarIncidentOut]
+
+
+class KGIndexRequest(BaseModel):
+    document_id: Optional[uuid.UUID] = None
+    force_rebuild: bool = True
+
+
+class KGIndexReportSummary(BaseModel):
+    document_id: uuid.UUID
+    doc_code: str
+    incidents_indexed: int
+    verified_incidents: int
+    entities_created: int
+    relations_created: int
+
+
+class KGNodeOut(BaseModel):
+    id: str
+    entity_type: str
+    name: str
+    mission: str
+    document_id: str
+    doc_code: str
+    document_title: str
+    source_url: str
+    licence: str
+    section: str
+    page_number: int
+    chunk_id: str
+    evidence_text: str
+    bbox_json: list[BBoxItem] = Field(default_factory=list)
+
+
+class KGEdgeOut(BaseModel):
+    id: str
+    source_entity_id: str
+    target_entity_id: str
+    relation_type: str
+    verification_status: str
+    page_number: int
+    evidence_text: str
+
+
+class KGGraphResponse(BaseModel):
+    nodes: list[KGNodeOut]
+    edges: list[KGEdgeOut]
+
+
+class KGQueryRequest(BaseModel):
+    query: str = Field(..., min_length=3, max_length=1000)
+    mission: Optional[str] = None
+
+
+class KGPathOut(BaseModel):
+    mission: str
+    subsystem: str
+    component: Optional[str] = None
+    anomaly: str
+    root_cause: str
+    corrective_action: str
+    verification_status: str
+    citation: CitationOut
+
+
+class KGQueryResponse(BaseModel):
+    answer: str
+    abstained: bool
+    matched_subsystems: list[str]
+    paths: list[KGPathOut]
+    citations: list[CitationOut]
+
+
 class CorpusStatsResponse(BaseModel):
     document_count: int
     section_count: int

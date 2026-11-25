@@ -13,6 +13,8 @@ from app.models.failure_kg import (
     FailureEvent,
     FailureRelationship,
     MissionEntity,
+    MissionEntityRelation,
+    MissionIncident,
 )
 from app.models.rag import (
     Citation,
@@ -39,5 +41,7 @@ __all__ = [
     "FailureEvent",
     "FailureRelationship",
     "MissionEntity",
+    "MissionEntityRelation",
+    "MissionIncident",
     "CorrectiveAction",
 ]

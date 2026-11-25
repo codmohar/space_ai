@@ -51,6 +51,11 @@ Results are saved to `data/evaluation/retrieval_results.json` and served by `GET
 - **Zero Hardcoded Chains:** `POST /api/failures/reconstruct` uses the shared `HybridRetriever` to pull investigation/anomaly/findings chunks, extracts structured `failure_events` and `failure_relationships` (`verification_status=pending`), and runs `evidence_validator` to promote records to `verified` only when the quote is supported in the stored chunk and both endpoints are verified.
 - **Chronology vs Causality:** Separates timeline ordering (`event_order`, `preceded_by`) from causal edges (`caused_by`, `contributed_to`, `associated_with`, `reported_as`) in the interactive React Flow canvas (`GET /api/failures/{id}/events`, `/relationships`), rendering unverified edges dashed with `"Unverified"` badges and offering one-click PDF jump + voice/text follow-up.
 
+## Similar Past Failures & Knowledge Graph (Phase 5)
+- **Incident Index (`mission_incidents`):** Extracted via `scripts/index_incidents_kg.py` or `POST /api/kg/index` with subsystem, root cause, consequence, corrective action, pgvector embedding, and `tsvector` + chunk provenance.
+- **Similar Failures (`POST /api/similar-failures/search`):** Extracts subsystems/mechanisms from the problem description, runs dense + BM25 + cross-encoder reranking with a subsystem/mechanism match boost, and returns transparent relevance breakdown + `"Reconstruct chain"` jump.
+- **Knowledge Graph Explorer (`GET /api/kg/graph`, `POST /api/kg/query`):** React Flow explorer over `mission_entities` and `mission_entity_relations` (`Mission > Subsystem > Component > Anomaly > Root Cause > Corrective Action`) supporting cited multi-hop queries.
+
 ---
 
 ## Quickstart

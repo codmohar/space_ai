@@ -1,0 +1,62 @@
+{
+  "status": "evaluated",
+  "generated_at": "2026-11-25T11:40:49.107865+00:00",
+  "dataset_path": "questions.jsonl",
+  "total_questions": 42,
+  "answerable_questions": 32,
+  "unanswerable_questions": 10,
+  "methods": [
+    {
+      "method": "bm25",
+      "stair_level": "Baseline",
+      "evaluated_questions": 32,
+      "recall_at_1": 0.4688,
+      "recall_at_3": 0.75,
+      "recall_at_5": 0.8438,
+      "mrr": 0.6172,
+      "ndcg_at_5": 0.6686,
+      "invalid_section_rate": 0.0,
+      "avg_latency_ms": 1.49,
+      "p95_latency_ms": 2.06
+    },
+    {
+      "method": "dense",
+      "stair_level": "Baseline",
+      "evaluated_questions": 32,
+      "recall_at_1": 0.4688,
+      "recall_at_3": 0.5312,
+      "recall_at_5": 0.5938,
+      "mrr": 0.5141,
+      "ndcg_at_5": 0.5222,
+      "invalid_section_rate": 0.0,
+      "avg_latency_ms": 18.79,
+      "p95_latency_ms": 29.79
+    },
+    {
+      "method": "hybrid",
+      "stair_level": "L1",
+      "evaluated_questions": 32,
+      "recall_at_1": 0.5938,
+      "recall_at_3": 0.7188,
+      "recall_at_5": 0.875,
+      "mrr": 0.687,
+      "ndcg_at_5": 0.7247,
+      "invalid_section_rate": 0.0,
+      "avg_latency_ms": 6001.97,
+      "p95_latency_ms": 9152.83
+    },
+    {
+      "method": "bm25_toc",
+      "stair_level": "L1-BM25",
+      "evaluated_questions": 32,
+      "recall_at_1": 0.375,
+      "recall_at_3": 0.625,
+      "recall_at_5": 0.6562,
+      "mrr": 0.501,
+      "ndcg_at_5": 0.541,
+      "invalid_section_rate": 0.0,
+      "avg_latency_ms": 3908.97,
+      "p95_latency_ms": 5988.82
+    }
+  ]
+}

@@ -14,7 +14,9 @@ from app.api.documents import router as documents_router
 from app.api.eval import router as eval_router
 from app.api.failures import router as failures_router
 from app.api.health import router as health_router
+from app.api.kg import router as kg_router
 from app.api.retrieval import router as retrieval_router
+from app.api.similar_failures import router as similar_failures_router
 from app.api.stair import router as stair_router
 from app.api.voice import router as voice_router
 from app.core.config import get_settings
@@ -64,3 +66,5 @@ app.include_router(citations_router)
 app.include_router(eval_router)
 app.include_router(voice_router)
 app.include_router(failures_router)
+app.include_router(similar_failures_router)
+app.include_router(kg_router)

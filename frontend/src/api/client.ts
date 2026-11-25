@@ -131,6 +131,99 @@ export interface FailureChainResponse {
   verified_relationships: number;
 }
 
+export interface RelevanceBreakdown {
+  semantic_score: number;
+  keyword_score: number;
+  rerank_score: number;
+  subsystem_match_score: number;
+  matched_terms: string[];
+  total_relevance: number;
+}
+
+export interface SimilarIncidentOut {
+  incident_id: string;
+  mission: string;
+  subsystem: string;
+  component?: string | null;
+  anomaly_title: string;
+  anomaly_description: string;
+  root_cause: string;
+  consequence: string;
+  corrective_action: string;
+  failure_mechanism?: string | null;
+  evidence_classification: EvidenceClassification;
+  verification_status: "pending" | "verified" | "rejected";
+  document_id: string;
+  doc_code: string;
+  document_title: string;
+  source_url: string;
+  licence: string;
+  section: string;
+  page_number: number;
+  chunk_id: string;
+  evidence_text: string;
+  bbox_json: BBoxItem[];
+  relevance: RelevanceBreakdown;
+}
+
+export interface SimilarFailuresSearchResponse {
+  extracted_subsystems: string[];
+  extracted_mechanisms: string[];
+  extracted_keywords: string[];
+  results: SimilarIncidentOut[];
+}
+
+export interface KGNodeOut {
+  id: string;
+  entity_type: string;
+  name: string;
+  mission: string;
+  document_id: string;
+  doc_code: string;
+  document_title: string;
+  source_url: string;
+  licence: string;
+  section: string;
+  page_number: number;
+  chunk_id: string;
+  evidence_text: string;
+  bbox_json: BBoxItem[];
+}
+
+export interface KGEdgeOut {
+  id: string;
+  source_entity_id: string;
+  target_entity_id: string;
+  relation_type: string;
+  verification_status: string;
+  page_number: number;
+  evidence_text: string;
+}
+
+export interface KGGraphResponse {
+  nodes: KGNodeOut[];
+  edges: KGEdgeOut[];
+}
+
+export interface KGPathOut {
+  mission: string;
+  subsystem: string;
+  component?: string | null;
+  anomaly: string;
+  root_cause: string;
+  corrective_action: string;
+  verification_status: string;
+  citation: CitationOut;
+}
+
+export interface KGQueryResponse {
+  answer: string;
+  abstained: boolean;
+  matched_subsystems: string[];
+  paths: KGPathOut[];
+  citations: CitationOut[];
+}
+
 export interface DocumentSummary {
   id: string;
   doc_code: string;
@@ -250,6 +343,35 @@ export const api = {
     apiFetch<FailureRelationshipOut[]>(
       `/api/failures/${documentId}/relationships`
     ),
+  searchSimilarFailures: (payload: {
+    problem_description: string;
+    mission?: string | null;
+    top_k?: number;
+  }) =>
+    apiFetch<SimilarFailuresSearchResponse>("/api/similar-failures/search", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  indexKnowledgeGraph: (documentId?: string | null, forceRebuild = true) =>
+    apiFetch("/api/kg/index", {
+      method: "POST",
+      body: JSON.stringify({
+        document_id: documentId || null,
+        force_rebuild: forceRebuild,
+      }),
+    }),
+  getKnowledgeGraph: (mission?: string, entityType?: string) => {
+    const params = new URLSearchParams();
+    if (mission) params.set("mission", mission);
+    if (entityType) params.set("entity_type", entityType);
+    const qs = params.toString();
+    return apiFetch<KGGraphResponse>(`/api/kg/graph${qs ? `?${qs}` : ""}`);
+  },
+  queryKnowledgeGraph: (query: string, mission?: string | null) =>
+    apiFetch<KGQueryResponse>("/api/kg/query", {
+      method: "POST",
+      body: JSON.stringify({ query, mission: mission || null }),
+    }),
   voiceWsUrl: () => {
     const u = new URL(API_BASE_URL);
     u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
