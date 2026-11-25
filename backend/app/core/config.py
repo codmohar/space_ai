@@ -62,6 +62,14 @@ class Settings(BaseSettings):
     stair_base_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
     eval_results_path: Path = Path("../data/evaluation/retrieval_results.json")
 
+    # Voice (faster-whisper STT + optional Piper TTS)
+    whisper_model_size: str = "base.en"
+    whisper_device: str = "cpu"
+    whisper_compute_type: str = "int8"
+    enable_server_stt: bool = True
+    piper_binary_path: str = "piper"
+    piper_voice_path: str = ""
+
     # Security & CORS
     jwt_secret_key: str = "change-me-in-production-32-chars-min"
     cors_origins: str = "http://localhost:5173,http://localhost:3000"

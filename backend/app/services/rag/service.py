@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import ABSTENTION_MESSAGE, get_settings
@@ -18,6 +19,8 @@ from app.services.rag.citation_validator import (
 )
 from app.services.rag.confidence import compute_retrieval_confidence
 from app.services.rag.prompt_guard import GROUNDED_SYSTEM_PROMPT, build_grounded_user_prompt
+from app.services.rag.query_rewriter import rewrite_followup_query
+from app.services.rag.spoken_formatter import format_spoken_answer
 from app.services.retrieval.hybrid import HybridRetriever, RetrievedCandidate
 from app.services.retrieval.logger import record_retrieval_log
 from app.services.retrieval.section_selector import build_section_selector
@@ -66,6 +69,7 @@ class RAGService:
         mission: Optional[str] = None,
         document_ids: Optional[list[uuid.UUID]] = None,
         selector_mode: Optional[str] = None,
+        simpler: bool = False,
     ) -> RAGExecutionResult:
         retriever = self._get_retriever(selector_mode)
         candidates, telemetry = retriever.search(
@@ -126,7 +130,9 @@ class RAGService:
             )
 
         llm = self._get_llm()
-        user_prompt = build_grounded_user_prompt(query, candidates, strict_retry=False)
+        user_prompt = build_grounded_user_prompt(
+            query, candidates, strict_retry=False, simpler=simpler
+        )
         llm_out = llm.generate_structured(
             system_prompt=GROUNDED_SYSTEM_PROMPT,
             user_prompt=user_prompt,
@@ -283,11 +289,33 @@ class RAGService:
 
         if conv is None:
             conv = Conversation(
+                id=uuid.uuid4(),
                 title=query.strip()[:80] or "Mission Inquiry",
                 mission_scope=mission,
             )
             db.add(conv)
             db.flush()
+
+        # Load conversation memory before inserting the new user message
+        history: list[tuple[str, str]] = []
+        if conv.id is not None:
+            prev_msgs = (
+                db.execute(
+                    select(Message)
+                    .where(Message.conversation_id == conv.id)
+                    .order_by(Message.created_at.asc())
+                )
+                .scalars()
+                .all()
+            )
+            history = [(m.role, m.content) for m in prev_msgs[-6:]]
+
+        rewritten = rewrite_followup_query(
+            query=query,
+            history=history,
+            mission_scope=mission or conv.mission_scope,
+            llm_client=self._llm_client,
+        )
 
         user_msg = Message(
             conversation_id=conv.id,
@@ -299,14 +327,23 @@ class RAGService:
 
         rag_res = self.answer_query(
             db=db,
-            query=query,
+            query=rewritten.standalone_query,
             request_id=request_id,
-            mission=mission,
+            mission=rewritten.resolved_mission or mission,
             document_ids=document_ids,
             selector_mode=selector_mode,
+            simpler=rewritten.response_style == "simpler",
+        )
+
+        spoken_text = format_spoken_answer(
+            claims=rag_res.claims,
+            abstained=rag_res.abstained,
+            written_answer=rag_res.answer,
+            style=rewritten.response_style,
         )
 
         assistant_msg = Message(
+            id=uuid.uuid4(),
             conversation_id=conv.id,
             retrieval_log_id=rag_res.retrieval_log_id,
             role="assistant",
@@ -345,6 +382,9 @@ class RAGService:
             message_id=assistant_msg.id,
             retrieval_log_id=rag_res.retrieval_log_id,
             answer=rag_res.answer,
+            spoken_text=spoken_text,
+            standalone_query=rewritten.standalone_query,
+            response_style=rewritten.response_style,
             claims=rag_res.claims,
             citations=persisted_citations if persisted_citations else rag_res.citations,
             confidence=rag_res.confidence,  # type: ignore[arg-type]

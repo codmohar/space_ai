@@ -54,6 +54,9 @@ export interface ChatResponse {
   message_id: string;
   retrieval_log_id: string;
   answer: string;
+  spoken_text?: string;
+  standalone_query?: string;
+  response_style?: "standard" | "simpler";
   claims: ClaimOut[];
   citations: CitationOut[];
   confidence: ConfidenceCategory;
@@ -64,6 +67,13 @@ export interface ChatResponse {
   selector_name: string;
   selected_sections: SelectedSectionOut[];
   used_section_ids: string[];
+}
+
+export interface VoiceCapabilities {
+  server_stt_available: boolean;
+  server_stt_engine: string;
+  server_tts_available: boolean;
+  server_tts_engine: string;
 }
 
 export interface DocumentSummary {
@@ -170,6 +180,13 @@ export const api = {
   getDocumentToc: (docId: string) =>
     apiFetch<DocumentSectionNode[]>(`/api/documents/${docId}/toc`),
   evalResults: () => apiFetch<EvalResultsResponse>("/api/eval/results"),
+  voiceCapabilities: () => apiFetch<VoiceCapabilities>("/api/voice/capabilities"),
+  voiceWsUrl: () => {
+    const u = new URL(API_BASE_URL);
+    u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
+    u.pathname = "/api/voice/stream";
+    return u.toString();
+  },
   chat: (payload: {
     query: string;
     conversation_id?: string | null;

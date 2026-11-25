@@ -15,6 +15,7 @@ from app.api.eval import router as eval_router
 from app.api.health import router as health_router
 from app.api.retrieval import router as retrieval_router
 from app.api.stair import router as stair_router
+from app.api.voice import router as voice_router
 from app.core.config import get_settings
 from app.core.errors import (
     ApiError,
@@ -60,3 +61,4 @@ app.include_router(stair_router)
 app.include_router(chat_router)
 app.include_router(citations_router)
 app.include_router(eval_router)
+app.include_router(voice_router)

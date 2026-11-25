@@ -27,6 +27,7 @@ def build_grounded_user_prompt(
     query: str,
     candidates: Sequence[RetrievedCandidate],
     strict_retry: bool = False,
+    simpler: bool = False,
 ) -> str:
     blocks: list[str] = []
     for cand in candidates:
@@ -37,6 +38,11 @@ def build_grounded_user_prompt(
             f'section="{cand.section_title}">\n{safe_text}\n</evidence_chunk>'
         )
 
+    style_note = (
+        "\n\n[STYLE] Explain using plain, direct engineering language without sacrificing factual accuracy or citations."
+        if simpler
+        else ""
+    )
     retry_note = (
         "\n\n[STRICT RETRY] Previous response contained invalid or unsupported citations. "
         "Cite ONLY exact chunk_ids shown above and copy verbatim quotes from those chunks."
@@ -48,5 +54,6 @@ def build_grounded_user_prompt(
         f"USER QUESTION:\n{query.strip()}\n\n"
         f"RETRIEVED MISSION REPORT EVIDENCE:\n"
         + "\n\n".join(blocks)
+        + style_note
         + retry_note
     )

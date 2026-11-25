@@ -204,6 +204,9 @@ class ChatResponse(BaseModel):
     message_id: uuid.UUID
     retrieval_log_id: uuid.UUID
     answer: str
+    spoken_text: str = ""
+    standalone_query: str = ""
+    response_style: Literal["standard", "simpler"] = "standard"
     claims: list[ClaimOut]
     citations: list[CitationOut]
     confidence: ConfidenceCategory

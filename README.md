@@ -42,6 +42,11 @@ python scripts/evaluate_retrieval.py --questions data/evaluation/questions.jsonl
 ```
 Results are saved to `data/evaluation/retrieval_results.json` and served by `GET /api/eval/results` to the Evaluation page. Until executed, the UI displays `"Not yet evaluated"`.
 
+## Voice Assistant (Phase 3)
+- **Single Shared Pipeline:** `WS /api/voice/stream`, `POST /api/voice/transcribe`, and `POST /api/voice/synthesize` route through the exact same `RAGService` + `CitationValidator` as `POST /api/chat`.
+- **Aerospace-Biased STT & Fallbacks:** Server `faster-whisper` uses an aerospace vocabulary prompt (`Small Forces`, `Newton-seconds`, `Apollo 13`, etc.); falls back to browser Web Speech API (`SpeechRecognition`) and `window.speechSynthesis` if server STT/TTS models are unavailable.
+- **Follow-up Memory & Spoken Style:** Resolves follow-ups (`"what was the initial issue?"`, `"explain simpler"`) into standalone questions and outputs concise spoken briefings with identical verified claims, live captions, PTT/hands-free modes, and barge-in/interrupt support.
+
 ---
 
 ## Quickstart

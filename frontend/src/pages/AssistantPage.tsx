@@ -1,11 +1,13 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, BookOpen, RotateCcw, Send } from "lucide-react";
-import { api, type CitationOut } from "../api/client";
+import { api, type ChatResponse, type CitationOut } from "../api/client";
 import { ClaimBlock } from "../components/chat/ClaimBlock";
 import { ConfidenceMeter } from "../components/chat/ConfidenceMeter";
 import { SplitPane } from "../components/layout/SplitPane";
 import { CitationViewer } from "../components/viewer/CitationViewer";
+import { VoiceConsoleBar } from "../components/voice/VoiceConsoleBar";
+import { useVoiceAssistant } from "../hooks/useVoiceAssistant";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 
 const SUGGESTED_QUERIES = [
@@ -44,30 +46,8 @@ export function AssistantPage() {
 
   const missions = Array.from(new Set((docs || []).map((d) => d.mission))).sort();
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (
-        e.key === "/" &&
-        document.activeElement?.tagName !== "INPUT" &&
-        document.activeElement?.tagName !== "TEXTAREA"
-      ) {
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  const chatMutation = useMutation({
-    mutationFn: (query: string) =>
-      api.chat({
-        query,
-        conversation_id: conversationId,
-        mission: selectedMission || null,
-        selector_mode: selectorMode,
-      }),
-    onSuccess: (data) => {
+  const applyChatResponse = useCallback(
+    (data: ChatResponse) => {
       setConversationId(data.conversation_id);
       addTurn({
         id: data.message_id,
@@ -89,6 +69,51 @@ export function AssistantPage() {
         null;
       setHighlightedSections(allSecIds, docId);
     },
+    [addTurn, setActiveCitation, setConversationId, setHighlightedSections]
+  );
+
+  const voice = useVoiceAssistant({
+    conversationId,
+    mission: selectedMission,
+    selectorMode,
+    onTranscript: (text) => {
+      addTurn({
+        id: crypto.randomUUID(),
+        role: "user",
+        query: `[VOICE] ${text}`,
+      });
+    },
+    onAnswer: (res) => {
+      applyChatResponse(res);
+    },
+  });
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (
+        e.key === "/" &&
+        document.activeElement?.tagName !== "INPUT" &&
+        document.activeElement?.tagName !== "TEXTAREA"
+      ) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      } else if (e.key === "Escape") {
+        voice.interrupt();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [voice]);
+
+  const chatMutation = useMutation({
+    mutationFn: (query: string) =>
+      api.chat({
+        query,
+        conversation_id: conversationId,
+        mission: selectedMission || null,
+        selector_mode: selectorMode,
+      }),
+    onSuccess: applyChatResponse,
     onError: (err: Error) => {
       addTurn({
         id: crypto.randomUUID(),
@@ -177,7 +202,10 @@ export function AssistantPage() {
 
         <button
           type="button"
-          onClick={clearTurns}
+          onClick={() => {
+            voice.interrupt();
+            clearTurns();
+          }}
           className="inline-flex items-center gap-1 rounded border border-console-border px-2 py-1 font-mono text-[11px] text-ink-secondary hover:border-console-borderStrong hover:text-ink-primary"
         >
           <RotateCcw className="h-3 w-3" />
@@ -185,19 +213,35 @@ export function AssistantPage() {
         </button>
       </div>
 
+      {/* Flight-Ops Voice Console Bar (PTT + Hands-Free + Captions + Interrupt) */}
+      <VoiceConsoleBar
+        mode={voice.mode}
+        voiceState={voice.voiceState}
+        liveTranscript={voice.liveTranscript}
+        spokenCaption={voice.spokenCaption}
+        engineBadge={voice.engineBadge}
+        waveformLevels={voice.waveformLevels}
+        errorMsg={voice.errorMsg}
+        onPttStart={voice.startPushToTalk}
+        onPttEnd={voice.stopPushToTalk}
+        onToggleHandsFree={voice.toggleHandsFree}
+        onInterrupt={voice.interrupt}
+      />
+
       {/* Scrollable Inquiry & Evidence Thread */}
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
         {turns.length === 0 && (
           <div className="rounded border border-console-border bg-console-surface p-4">
             <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-signal-amber">
-              GROUNDED EVIDENCE WORKBENCH
+              GROUNDED EVIDENCE WORKBENCH (TEXT + VOICE)
             </span>
             <h3 className="mt-1 text-sm font-semibold text-ink-primary">
-              Ask an engineering question across ingested mission reports
+              Ask an engineering question by typing or using the Voice Console
             </h3>
             <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
-              ToC leaf-section selection narrows retrieval before hybrid ranking and
-              pre-response citation validation. Out-of-corpus queries trigger abstention.
+              Voice and text share the exact same retrieval, follow-up query rewriter,
+              and pre-response citation validator. Spoken answers use concise radio style
+              with identical grounded claims.
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2">
               {SUGGESTED_QUERIES.map((q) => (
@@ -272,7 +316,13 @@ export function AssistantPage() {
                 stairLevel={`${res.stair_level} (${res.selector_name})`}
               />
 
-              {/* Highlighted ToC Sections Used for This Answer */}
+              {res.standalone_query && (
+                <div className="rounded border border-console-border bg-console-surface px-3 py-1.5 font-mono text-[11px] text-ink-secondary">
+                  <span className="mr-2 text-ink-muted">RESOLVED QUERY:</span>
+                  {res.standalone_query}
+                </div>
+              )}
+
               {uniqueUsedSections.size > 0 && (
                 <div className="rounded border border-signal-amber/35 bg-signal-amberDim/50 px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
@@ -356,7 +406,7 @@ export function AssistantPage() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Query root causes, subsystems, corrective actions... (press / to focus)"
+            placeholder="Query root causes, subsystems, follow-ups ('explain simpler')... (press / to focus)"
             className="flex-1 rounded border border-console-borderStrong bg-console-bg px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-signal-amber focus:outline-none"
           />
           <button
