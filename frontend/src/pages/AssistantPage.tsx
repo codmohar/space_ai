@@ -319,7 +319,10 @@ export function AssistantPage() {
             <select
               id="mission-scope"
               value={selectedMission}
-              onChange={(e) => setSelectedMission(e.target.value)}
+              onChange={(e) => {
+                setSelectedMission(e.target.value);
+                setConversationId(null);
+              }}
               className="rounded border border-console-borderStrong bg-console-bg px-2 py-1 font-mono text-xs text-ink-primary focus:border-signal-amber focus:outline-none"
             >
               <option value="">All Seeded Reports</option>
@@ -369,6 +372,7 @@ export function AssistantPage() {
             type="button"
             onClick={() => {
               voice.interrupt();
+              setConversationId(null);
               clearTurns();
             }}
             className="inline-flex items-center gap-1 rounded border border-console-border px-2 py-1 font-mono text-[11px] text-ink-secondary hover:border-console-borderStrong hover:text-ink-primary"

@@ -57,8 +57,10 @@ def detect_response_style(query: str) -> ResponseStyle:
 def _extract_mission_from_text(text: str, known_missions: Optional[Sequence[str]] = None) -> Optional[str]:
     lower = text.lower()
     candidates = list(known_missions) if known_missions else list(_KNOWN_MISSIONS)
+    # Sort candidates by length descending so longer mission names match first
+    candidates = sorted(candidates, key=lambda c: len(c), reverse=True)
     for mission in candidates:
-        if mission.lower() in lower:
+        if mission and mission.lower() in lower:
             return mission
     return None
 
@@ -71,9 +73,8 @@ def _needs_rewrite(query: str, history: Sequence[tuple[str, str]]) -> bool:
         return True
     if _FOLLOWUP_ANAPHORA.search(stripped):
         return True
-    # Short queries in an active conversation are typically follow-ups
-    if len(stripped.split()) <= 8 and not _extract_mission_from_text(stripped):
-        return True
+    # If the user asks a complete, new question with explicit nouns (>= 4 words) without anaphoric pronouns,
+    # treat it as a distinct query rather than gluing past conversation anchors.
     return False
 
 
@@ -87,15 +88,11 @@ def _deterministic_rewrite(
     anchor = last_user_queries[-1].strip() if last_user_queries else ""
 
     inferred_mission = mission_scope or _extract_mission_from_text(query)
-    if not inferred_mission:
-        for _role, content in reversed(history):
-            inferred_mission = _extract_mission_from_text(content)
-            if inferred_mission:
-                break
 
+    # Only attach anchor if the query actually has anaphora or is requesting simpler explanation
     if style == "simpler" and len(query.split()) <= 6 and anchor:
         standalone = anchor
-    elif anchor and query.strip().lower() != anchor.lower():
+    elif _FOLLOWUP_ANAPHORA.search(query) and anchor and query.strip().lower() != anchor.lower():
         if inferred_mission and inferred_mission.lower() not in query.lower():
             standalone = f"Regarding {inferred_mission} ({anchor}): {query.strip()}"
         else:

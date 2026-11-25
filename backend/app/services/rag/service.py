@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from typing import Optional
@@ -444,19 +445,41 @@ class RAGService:
         """Deterministic extractive grounded claims fallback when LLM API quota is exhausted."""
         from app.services.rag.citation_validator import LLMCitationRef, LLMClaimItem
 
+        query_terms = {t.lower() for t in re.findall(r"[a-z0-9]+", query) if len(t) > 2}
+
         claims: list[LLMClaimItem] = []
-        for cand in candidates[:3]:
-            # Pick first 1-2 sentences from candidate chunk text as grounded claim
-            sentences = [s.strip() for s in (cand.text or "").split(". ") if len(s.strip()) > 30]
-            if not sentences:
+        for cand in candidates[:4]:
+            text = (cand.text or "").strip()
+            # Split into natural sentences or paragraphs
+            raw_sentences = [
+                s.strip().replace("\n", " ")
+                for s in re.split(r"(?<=[.!?])\s+|\n{2,}", text)
+                if len(s.strip()) > 35
+            ]
+            
+            # Prioritize sentences that directly mention query terms
+            matching_sentences = [
+                s for s in raw_sentences
+                if any(term in s.lower() for term in query_terms)
+            ]
+            chosen_sentences = matching_sentences if matching_sentences else raw_sentences
+            
+            if not chosen_sentences:
                 continue
-            claim_text = sentences[0]
-            if not claim_text.endswith("."):
+
+            # Pick the top informative sentence
+            claim_text = chosen_sentences[0].strip()
+            if not claim_text.endswith((".", "!", "?")):
                 claim_text += "."
-            quote = claim_text[:120]
+
+            # Ensure quote is verbatim substring of candidate text
+            quote = claim_text[:110]
+            if quote not in cand.text:
+                quote = cand.text[:110]
+
             claims.append(
                 LLMClaimItem(
-                    claim_text=claim_text,
+                    claim_text=f"[{cand.doc_code} · {cand.mission}] {claim_text}",
                     evidence_classification="explicitly_stated",
                     citation_refs=[
                         LLMCitationRef(
