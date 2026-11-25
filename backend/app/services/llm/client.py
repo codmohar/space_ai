@@ -56,11 +56,18 @@ class GeminiLLMClient(LLMClient):
         client = genai.Client(api_key=self.api_key)
         last_error: Exception | None = None
         prompt = user_prompt
+        fallback_models = [
+            m
+            for m in (self.model_name, "gemini-3.5-flash", "gemini-flash-latest")
+            if m
+        ]
+        active_model_idx = 0
 
         for attempt in range(max_retries + 1):
+            current_model = fallback_models[min(active_model_idx, len(fallback_models) - 1)]
             try:
                 response = client.models.generate_content(
-                    model=self.model_name,
+                    model=current_model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=system_prompt,
@@ -84,7 +91,9 @@ class GeminiLLMClient(LLMClient):
                 )
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
-                logger.error("Gemini API error on attempt %d: %s", attempt + 1, exc)
+                logger.error("Gemini API error (%s) on attempt %d: %s", current_model, attempt + 1, exc)
+                if active_model_idx + 1 < len(fallback_models):
+                    active_model_idx += 1
                 if attempt >= max_retries:
                     break
 
