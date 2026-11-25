@@ -180,6 +180,14 @@ class IngestionJobManager:
             if not chk_count and res.status != "duplicate":
                 raise ApiError("INGESTION_INCOMPLETE", "Document failed atomic check: no chunks were stored.")
 
+            # Automatically index failure incidents and entity graph for similar failure retrieval
+            try:
+                from app.services.incidents.indexer import IncidentKGIndexer
+                kg_indexer = IncidentKGIndexer()
+                kg_indexer.index_document(db=db, document_id=res.document_id, force_rebuild=False)
+            except Exception as kg_exc:
+                logger.warning("Auto incident indexing for document %s note: %s", res.document_id, kg_exc)
+
             job.status = "indexed"
             job.progress_pct = 100
             job.document_id = res.document_id

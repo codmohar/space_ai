@@ -12,6 +12,7 @@ interface AddDocumentModalProps {
 export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModalProps) {
   const queryClient = useQueryClient();
   const [files, setFiles] = useState<File[]>([]);
+  const [docCode, setDocCode] = useState("");
   const [title, setTitle] = useState("");
   const [mission, setMission] = useState("");
   const [organization, setOrganization] = useState("NASA");
@@ -39,9 +40,13 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
       for (const file of files) {
         const formData = new FormData();
         formData.append("file", file);
+        if (docCode.trim()) {
+          formData.append("doc_code", docCode.trim());
+        }
         formData.append("title", title.trim() || file.name.replace(/\.[^/.]+$/, ""));
         formData.append("mission", mission.trim() || "Aerospace Engineering");
-        formData.append("organization", organization.trim() || "NASA/ISRO/ESA");
+        formData.append("org", organization.trim() || "NASA");
+        formData.append("organization", organization.trim() || "NASA");
         formData.append("source_url", finalSourceUrl);
         formData.append("licence", licence.trim() || "Public Domain");
         formData.append("classification", classification);
@@ -141,8 +146,19 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
 
           {/* Metadata Form */}
           <div className="grid grid-cols-2 gap-3 font-mono">
-            <div className="col-span-2">
-              <label className="block text-[11px] text-ink-muted">Document Title Override</label>
+            <div>
+              <label className="block text-[11px] text-ink-muted">Document Code (Optional)</label>
+              <input
+                type="text"
+                value={docCode}
+                onChange={(e) => setDocCode(e.target.value)}
+                placeholder="e.g. NASA-MCO-1999"
+                className="mt-1 w-full rounded border border-console-borderStrong bg-console-base px-2.5 py-1.5 text-xs text-ink-primary focus:border-signal-amber focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-ink-muted">Document Title</label>
               <input
                 type="text"
                 value={title}

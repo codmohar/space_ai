@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -58,33 +61,104 @@ def get_supported_formats() -> list[SupportedFormatInfo]:
     ]
 
 
+def _resolve_upload_metadata(
+    filename: str,
+    raw_bytes: bytes,
+    doc_code: Optional[str] = None,
+    title: Optional[str] = None,
+    source_url: Optional[str] = None,
+    licence: Optional[str] = None,
+    org: Optional[str] = None,
+    organization: Optional[str] = None,
+    mission: Optional[str] = None,
+) -> tuple[str, str, str, str, str, str]:
+    """Auto-derives missing metadata gracefully so UI and API uploads never fail validation."""
+    clean_stem = Path(filename).stem
+    safe_name = re.sub(r"[^A-Za-z0-9_-]", "-", clean_stem).strip("-") or "DOC"
+    
+    # 1. Organization
+    resolved_org = (org or organization or "NASA").strip()
+    
+    # 2. Mission
+    resolved_mission = (mission or "Aerospace Engineering").strip()
+    
+    # 3. Document Code
+    if doc_code and doc_code.strip():
+        resolved_doc_code = doc_code.strip().upper()
+    else:
+        sha_prefix = hashlib.sha256(raw_bytes[:4096]).hexdigest()[:6].upper()
+        resolved_doc_code = f"{resolved_org[:4].upper()}-{safe_name[:12].upper()}-{sha_prefix}"
+
+    # 4. Title
+    if title and title.strip():
+        resolved_title = title.strip()
+    else:
+        resolved_title = clean_stem.replace("_", " ").replace("-", " ").title()
+
+    # 5. Source URL
+    resolved_source_url = (source_url or "uploaded, no public URL").strip()
+
+    # 6. Licence
+    resolved_licence = (licence or "Public Domain / NASA Technical Report").strip()
+
+    return (
+        resolved_doc_code,
+        resolved_title,
+        resolved_source_url,
+        resolved_licence,
+        resolved_org,
+        resolved_mission,
+    )
+
+
 @router.post("/upload", response_model=IngestResponse)
 async def upload_document(
     request: Request,
     file: UploadFile = File(...),
-    doc_code: str = Form(...),
-    title: str = Form(...),
-    source_url: str = Form(...),
-    licence: str = Form(...),
-    org: str = Form("NASA"),
-    mission: str = Form("Unknown"),
+    doc_code: Optional[str] = Form(None),
+    title: Optional[str] = Form(None),
+    source_url: Optional[str] = Form(None),
+    licence: Optional[str] = Form(None),
+    org: Optional[str] = Form(None),
+    organization: Optional[str] = Form(None),
+    mission: Optional[str] = Form(None),
     version: str = Form("1.0"),
     classification: str = Form("public"),
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
 ) -> IngestResponse:
     raw_bytes = await file.read()
-    pipeline = IngestionPipeline()
-    res = pipeline.ingest_bytes(
-        db=db,
+    filename = file.filename or "report.pdf"
+    (
+        c_doc_code,
+        c_title,
+        c_source_url,
+        c_licence,
+        c_org,
+        c_mission,
+    ) = _resolve_upload_metadata(
+        filename=filename,
         raw_bytes=raw_bytes,
-        filename=file.filename or "report.pdf",
         doc_code=doc_code,
         title=title,
         source_url=source_url,
         licence=licence,
         org=org,
+        organization=organization,
         mission=mission,
+    )
+
+    pipeline = IngestionPipeline()
+    res = pipeline.ingest_bytes(
+        db=db,
+        raw_bytes=raw_bytes,
+        filename=filename,
+        doc_code=c_doc_code,
+        title=c_title,
+        source_url=c_source_url,
+        licence=c_licence,
+        org=c_org,
+        mission=c_mission,
         version=version,
         classification=classification,
         content_type=file.content_type,
@@ -122,12 +196,13 @@ async def upload_document_async(
     background_tasks: BackgroundTasks,
     request: Request,
     file: UploadFile = File(...),
-    doc_code: str = Form(...),
-    title: str = Form(...),
-    source_url: str = Form(...),
-    licence: str = Form(...),
-    org: str = Form("NASA"),
-    mission: str = Form("Unknown"),
+    doc_code: Optional[str] = Form(None),
+    title: Optional[str] = Form(None),
+    source_url: Optional[str] = Form(None),
+    licence: Optional[str] = Form(None),
+    org: Optional[str] = Form(None),
+    organization: Optional[str] = Form(None),
+    mission: Optional[str] = Form(None),
     version: str = Form("1.0"),
     classification: str = Form("public"),
     db: Session = Depends(get_db),
@@ -135,17 +210,36 @@ async def upload_document_async(
 ) -> IngestionJobOut:
     raw_bytes = await file.read()
     filename = file.filename or "report.pdf"
-    manager = IngestionJobManager()
-    job = manager.create_job(
-        db=db,
+    (
+        c_doc_code,
+        c_title,
+        c_source_url,
+        c_licence,
+        c_org,
+        c_mission,
+    ) = _resolve_upload_metadata(
         filename=filename,
+        raw_bytes=raw_bytes,
         doc_code=doc_code,
         title=title,
         source_url=source_url,
         licence=licence,
-        raw_bytes=raw_bytes,
         org=org,
+        organization=organization,
         mission=mission,
+    )
+
+    manager = IngestionJobManager()
+    job = manager.create_job(
+        db=db,
+        filename=filename,
+        doc_code=c_doc_code,
+        title=c_title,
+        source_url=c_source_url,
+        licence=c_licence,
+        raw_bytes=raw_bytes,
+        org=c_org,
+        mission=c_mission,
         version=version,
         classification=classification,
         content_type=file.content_type,
@@ -157,12 +251,12 @@ async def upload_document_async(
         job_id=job.job_id,
         raw_bytes=raw_bytes,
         filename=filename,
-        doc_code=doc_code,
-        title=title,
-        source_url=source_url,
-        licence=licence,
-        org=org,
-        mission=mission,
+        doc_code=c_doc_code,
+        title=c_title,
+        source_url=c_source_url,
+        licence=c_licence,
+        org=c_org,
+        mission=c_mission,
         version=version,
         classification=classification,
         content_type=file.content_type,

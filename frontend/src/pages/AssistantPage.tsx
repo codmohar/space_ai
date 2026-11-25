@@ -6,6 +6,7 @@ import {
   BookOpen,
   ChevronDown,
   ChevronUp,
+  Download,
   RotateCcw,
   Send,
 } from "lucide-react";
@@ -162,6 +163,147 @@ export function AssistantPage() {
     setActiveRoute("documents");
   };
 
+  const handleDownloadSummaryPdf = () => {
+    if (turns.length === 0) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    const sessionDate = new Date().toLocaleString();
+    const missionScopeLabel = selectedMission || "All Mission Reports (Global Corpus)";
+
+    const turnsHtml = turns
+      .map((t, idx) => {
+        const resp = t.response;
+        const confidence = resp?.confidence || "STRONG";
+        const roleBadge =
+          t.role === "user"
+            ? `<div style="font-size: 11px; font-weight: bold; color: #4a5568; margin-bottom: 4px;">[INQUIRY ${idx + 1}] ENGINEER QUERY</div>`
+            : `<div style="font-size: 11px; font-weight: bold; color: #b45309; margin-bottom: 4px;">[RESPONSE ${idx + 1}] MISSIONWISE AI // CONFIDENCE: ${confidence.toUpperCase()}</div>`;
+
+        const content =
+          t.role === "user"
+            ? `<div style="font-size: 14px; font-weight: 600; color: #1a202c; margin-bottom: 12px; background: #f7fafc; padding: 10px; border-left: 3px solid #718096;">${t.query || ""}</div>`
+            : `
+              <div style="font-size: 13px; line-height: 1.6; color: #2d3748; margin-bottom: 12px;">${resp?.answer || t.error || ""}</div>
+              ${
+                resp?.claims && resp.claims.length > 0
+                  ? `
+                    <div style="margin-top: 10px;">
+                      <div style="font-size: 11px; font-weight: bold; text-transform: uppercase; color: #718096; margin-bottom: 6px;">Ground Truth Verified Claims:</div>
+                      <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #4a5568;">
+                        ${resp.claims
+                          .map(
+                            (c) => `
+                              <li style="margin-bottom: 6px;">
+                                <span>${c.claim_text}</span>
+                                <span style="font-size: 10px; font-family: monospace; background: #edf2f7; padding: 2px 5px; border-radius: 3px; margin-left: 6px;">
+                                  [${c.evidence_classification}]
+                                </span>
+                              </li>`
+                          )
+                          .join("")}
+                      </ul>
+                    </div>
+                  `
+                  : ""
+              }
+              ${
+                resp?.citations && resp.citations.length > 0
+                  ? `
+                    <div style="margin-top: 10px; font-size: 11px; font-family: monospace; color: #4a5568; background: #f7fafc; padding: 8px; border: 1px solid #e2e8f0; border-radius: 4px;">
+                      <div style="font-weight: bold; margin-bottom: 4px; color: #2b6cb0;">CITED ARCHIVAL SOURCES:</div>
+                      ${resp.citations
+                        .map(
+                          (cit) => `
+                            <div style="margin-bottom: 3px;">
+                              • <strong>${cit.doc_code}</strong> · Page ${cit.page_number} · Section: ${cit.section}
+                              <br/><span style="color: #718096; font-style: italic;">"${cit.quote ? cit.quote.substring(0, 140) + '...' : ''}"</span>
+                            </div>`
+                        )
+                        .join("")}
+                    </div>
+                  `
+                  : ""
+              }
+            `;
+
+        return `
+          <div style="margin-bottom: 24px; padding-bottom: 18px; border-bottom: 1px solid #e2e8f0;">
+            ${roleBadge}
+            ${content}
+          </div>
+        `;
+      })
+      .join("");
+
+    const reportHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>MISSIONWISE AI - Research Brief (${sessionDate})</title>
+          <style>
+            @page { size: A4; margin: 20mm; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              color: #1a202c;
+              line-height: 1.5;
+              padding: 20px;
+            }
+            .header-table { width: 100%; border-bottom: 2px solid #b45309; padding-bottom: 12px; margin-bottom: 20px; }
+            .header-title { font-size: 20px; font-weight: 800; letter-spacing: 0.05em; color: #1a202c; }
+            .header-sub { font-size: 12px; font-family: monospace; color: #718096; margin-top: 4px; }
+            .meta-box { font-size: 11px; font-family: monospace; background: #edf2f7; padding: 8px 12px; border-radius: 4px; margin-bottom: 24px; }
+            .disclaimer { margin-top: 30px; padding-top: 12px; border-top: 1px solid #cbd5e0; font-size: 10px; color: #718096; text-align: center; font-style: italic; }
+            @media print {
+              body { padding: 0; }
+              button { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+            <button onclick="window.print()" style="cursor: pointer; background: #b45309; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; font-size: 12px; font-weight: 600;">Print / Save as PDF</button>
+          </div>
+          <table class="header-table">
+            <tr>
+              <td>
+                <div class="header-title">MISSIONWISE AI // FLIGHT-OPS ENGINEERING BRIEF</div>
+                <div class="header-sub">SPACE MISSION LESSONS-LEARNED INTELLIGENCE PLATFORM (AVISHKAR 2K26)</div>
+              </td>
+            </tr>
+          </table>
+
+          <div class="meta-box">
+            <strong>CORPUS SCOPE:</strong> ${missionScopeLabel} &nbsp;|&nbsp;
+            <strong>SESSION DATE:</strong> ${sessionDate} &nbsp;|&nbsp;
+            <strong>SESSION ID:</strong> ${conversationId || "ad-hoc-research"} &nbsp;|&nbsp;
+            <strong>TOTAL INQUIRIES:</strong> ${turns.filter((t) => t.role === "user").length}
+          </div>
+
+          <div class="content">
+            ${turnsHtml}
+          </div>
+
+          <div class="disclaimer">
+            CONFIDENTIALITY & DISCLAIMER: MISSIONWISE AI is an engineering knowledge-support tool, not a certifier of spacecraft safety.
+            All factual claims are grounded with citations in public space agency technical reports (NASA/ISRO/ESA).
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(reportHtml);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.focus();
+    }, 250);
+  };
+
   const assistantPane = (
     <div className="flex h-full flex-col bg-console-bg">
       {/* Scope, STAIR Selector Mode & Reset Toolbar */}
@@ -210,17 +352,31 @@ export function AssistantPage() {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            voice.interrupt();
-            clearTurns();
-          }}
-          className="inline-flex items-center gap-1 rounded border border-console-border px-2 py-1 font-mono text-[11px] text-ink-secondary hover:border-console-borderStrong hover:text-ink-primary"
-        >
-          <RotateCcw className="h-3 w-3" />
-          New Session
-        </button>
+        <div className="flex items-center gap-2">
+          {turns.length > 0 && (
+            <button
+              type="button"
+              onClick={handleDownloadSummaryPdf}
+              className="inline-flex items-center gap-1.5 rounded border border-signal-amber/60 bg-signal-amberDim/20 px-2.5 py-1 font-mono text-[11px] font-semibold text-signal-amber hover:bg-signal-amberDim/40"
+              title="Download/Print formatted research session summary as PDF"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download Summary (PDF)
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              voice.interrupt();
+              clearTurns();
+            }}
+            className="inline-flex items-center gap-1 rounded border border-console-border px-2 py-1 font-mono text-[11px] text-ink-secondary hover:border-console-borderStrong hover:text-ink-primary"
+          >
+            <RotateCcw className="h-3 w-3" />
+            New Session
+          </button>
+        </div>
       </div>
 
       {/* Flight-Ops Voice Console Bar (PTT + Hands-Free + Captions + Interrupt) */}
