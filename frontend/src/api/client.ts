@@ -600,6 +600,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ...payload, use_cache: payload.use_cache ?? true }),
     }),
+  deleteDocument: (docId: string) =>
+    apiFetch<{ success: boolean; message: string; deleted_document_id: string }>(
+      `/api/documents/${docId}`,
+      { method: "DELETE" }
+    ),
   documentPdfUrl: (docId: string) =>
     `${API_BASE_URL}/api/documents/${docId}/file`,
 };

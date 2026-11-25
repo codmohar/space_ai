@@ -617,3 +617,69 @@ def get_document_pdf_file(
         filename=file_path.name,
         headers={"Content-Disposition": f'inline; filename="{file_path.name}"'},
     )
+
+
+@router.delete("/{document_id}")
+def delete_document(
+    document_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+) -> dict[str, Any]:
+    """Deletes a document and cascades deletion across chunks, embeddings, ToC sections, KG, and physical file."""
+    from sqlalchemy import text
+
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise ApiError("DOCUMENT_NOT_FOUND", "Document not found.", status_code=404)
+
+    doc_code = doc.doc_code
+    file_path_str = doc.file_path
+
+    # Authorization check if auth is enabled
+    if current_user and getattr(current_user.role, "name", "") not in ("admin", "engineer"):
+        raise ApiError("FORBIDDEN", "Only engineers or admins may delete documents.", status_code=403)
+
+    # Delete physical file from disk if present in storage
+    try:
+        p = Path(file_path_str)
+        if p.exists() and p.is_file():
+            p.unlink()
+    except Exception as exc:  # noqa: BLE001
+        pass
+
+    # Delete document record (foreign keys cascade to document_chunks, document_embeddings, document_sections, etc.)
+    db.delete(doc)
+    db.flush()
+
+    # Atomically increment corpus version and refresh counts
+    try:
+        db.execute(
+            text(
+                "UPDATE corpus_metadata SET version = version + 1, "
+                "document_count = (SELECT COUNT(*) FROM documents), "
+                "chunk_count = (SELECT COUNT(*) FROM document_chunks), "
+                "updated_at = NOW() WHERE id = 1"
+            )
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+    record_audit_log(
+        db=db,
+        action="document.delete",
+        resource_type="document",
+        resource_id=str(document_id),
+        user_id=current_user.id if current_user else None,
+        request_id=getattr(request.state, "request_id", None),
+        details={"doc_code": doc_code},
+    )
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"Document '{doc_code}' and all associated embeddings, sections, and knowledge graph relations deleted successfully.",
+        "deleted_document_id": str(document_id),
+        "doc_code": doc_code,
+    }

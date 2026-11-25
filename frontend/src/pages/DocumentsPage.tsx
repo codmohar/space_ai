@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
   ChevronDown,
@@ -8,6 +8,7 @@ import {
   Eye,
   Plus,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import {
   api,
@@ -63,8 +64,37 @@ function buildSectionTree(
 }
 
 export function DocumentsPage() {
+  const queryClient = useQueryClient();
   const [selectedDoc, setSelectedDoc] = useState<DocumentSummary | null>(null);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+  const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (docId: string) => api.deleteDocument(docId),
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.invalidateQueries({ queryKey: ["corpus-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-graph"] });
+      if (selectedDoc?.id === deletedId) {
+        setSelectedDoc(null);
+      }
+      setDeletingDocId(null);
+    },
+    onError: (err: Error) => {
+      alert(`Failed to delete document: ${err.message}`);
+      setDeletingDocId(null);
+    },
+  });
+
+  const handleDelete = (doc: DocumentSummary, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const confirmed = window.confirm(
+      `Are you sure you want to delete '${doc.doc_code}: ${doc.title}'?\n\nThis will permanently remove the document from the relational database, purge its chunks and vector embeddings, delete associated knowledge graph entities, and unlink the physical file.`
+    );
+    if (!confirmed) return;
+    setDeletingDocId(doc.id);
+    deleteMutation.mutate(doc.id);
+  };
   const {
     highlightedSectionIds,
     highlightedDocumentId,
@@ -290,17 +320,29 @@ export function DocumentsPage() {
                         </h3>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openDocumentInViewer(doc, 1);
-                        }}
-                        className="inline-flex shrink-0 items-center gap-1 rounded border border-console-borderStrong bg-console-bg px-2.5 py-1 font-mono text-[11px] text-ink-primary hover:border-signal-amber hover:text-signal-amber"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        Open PDF
-                      </button>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDocumentInViewer(doc, 1);
+                          }}
+                          className="inline-flex shrink-0 items-center gap-1 rounded border border-console-borderStrong bg-console-bg px-2.5 py-1 font-mono text-[11px] text-ink-primary hover:border-signal-amber hover:text-signal-amber"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          Open PDF
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deletingDocId === doc.id}
+                          onClick={(e) => handleDelete(doc, e)}
+                          title="Permanently delete document from database, vector embeddings, and storage"
+                          className="inline-flex shrink-0 items-center gap-1 rounded border border-status-conflict/40 bg-status-conflict/10 px-2 py-1 font-mono text-[11px] text-status-conflict hover:border-status-conflict hover:bg-status-conflict/20 disabled:opacity-40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {deletingDocId === doc.id ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
                     </div>
 
                     <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] tabular-nums text-ink-secondary">
