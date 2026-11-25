@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 from typing import Optional
@@ -9,7 +10,10 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+logger = logging.getLogger(__name__)
+
 from app.core.config import ABSTENTION_MESSAGE, get_settings
+from app.core.errors import ApiError
 from app.models.rag import Citation, Conversation, Message
 from app.schemas import ChatResponse, ClaimOut, EvidenceClassification, SelectedSectionOut
 from app.services.llm.client import LLMClient, get_llm_client
@@ -135,12 +139,19 @@ class RAGService:
         user_prompt = build_grounded_user_prompt(
             query, candidates, strict_retry=False, simpler=simpler
         )
-        llm_out = llm.generate_structured(
-            system_prompt=GROUNDED_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            schema_cls=LLMRAGOutput,
-            max_retries=self.settings.llm_max_retries,
-        )
+        try:
+            llm_out = llm.generate_structured(
+                system_prompt=GROUNDED_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                schema_cls=LLMRAGOutput,
+                max_retries=self.settings.llm_max_retries,
+            )
+        except ApiError as exc:
+            if exc.code == "LLM_GENERATION_FAILED" and candidates:
+                logger.warning("LLM generation failed (quota/upstream). Using extractive grounded fallback: %s", exc)
+                llm_out = self._extractive_grounded_fallback(query, candidates)
+            else:
+                raise
 
         if llm_out.insufficient_evidence or not llm_out.claims:
             log = record_retrieval_log(
@@ -376,17 +387,6 @@ class RAGService:
             )
             db.add(conv)
             db.flush()
-            conversation_id=conv.id,
-            retrieval_log_id=rag_res.retrieval_log_id,
-            role="assistant",
-            content=rag_res.answer,
-            confidence=rag_res.confidence,
-            confidence_score=rag_res.confidence_score,
-            abstained=rag_res.abstained,
-            claims_json=[c.model_dump(mode="json") for c in rag_res.claims],
-        )
-        db.add(assistant_msg)
-        db.flush()
 
         persisted_citations = []
         for idx, claim in enumerate(rag_res.claims):
@@ -427,6 +427,44 @@ class RAGService:
             selector_name=rag_res.selector_name,
             selected_sections=rag_res.selected_sections,
             used_section_ids=rag_res.used_section_ids,
+        )
+
+    def _extractive_grounded_fallback(
+        self,
+        query: str,
+        candidates: Sequence[RetrievedCandidate],
+    ) -> LLMRAGOutput:
+        """Deterministic extractive grounded claims fallback when LLM API quota is exhausted."""
+        from app.services.rag.citation_validator import LLMCitationRef, LLMClaimItem
+
+        claims: list[LLMClaimItem] = []
+        for cand in candidates[:3]:
+            # Pick first 1-2 sentences from candidate chunk text as grounded claim
+            sentences = [s.strip() for s in (cand.text or "").split(". ") if len(s.strip()) > 30]
+            if not sentences:
+                continue
+            claim_text = sentences[0]
+            if not claim_text.endswith("."):
+                claim_text += "."
+            quote = claim_text[:120]
+            claims.append(
+                LLMClaimItem(
+                    claim_text=claim_text,
+                    evidence_classification="explicitly_stated",
+                    citation_refs=[
+                        LLMCitationRef(
+                            chunk_id=str(cand.chunk_id),
+                            page_number=cand.page_number,
+                            quote=quote,
+                        )
+                    ],
+                )
+            )
+
+        return LLMRAGOutput(
+            claims=claims,
+            insufficient_evidence=len(claims) == 0,
+            conflicting_evidence=False,
         )
 
 

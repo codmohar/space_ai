@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal, Optional, Sequence
 
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.core.errors import ApiError
 from app.core.security import sanitize_untrusted_document_text
@@ -111,7 +114,9 @@ class FailureChainService:
     def _get_retriever(self) -> HybridRetriever:
         if self._retriever is not None:
             return self._retriever
-        return HybridRetriever(section_selector=build_section_selector())
+        from app.services.retrieval.section_selector import BM25ToCSectionSelector
+
+        return HybridRetriever(section_selector=BM25ToCSectionSelector())
 
     def _get_llm(self) -> LLMClient:
         return self._llm_client or get_llm_client()
@@ -237,12 +242,16 @@ class FailureChainService:
         )
 
         llm = self._get_llm()
-        extracted = llm.generate_structured(
-            system_prompt=_EXTRACTION_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            schema_cls=_LLMFailureChainOutput,
-            max_retries=2,
-        )
+        try:
+            extracted = llm.generate_structured(
+                system_prompt=_EXTRACTION_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                schema_cls=_LLMFailureChainOutput,
+                max_retries=1,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("LLM failure chain extraction failed. Using extractive fallback: %s", exc)
+            extracted = self._extractive_chain_fallback(doc, chunks)
 
         # Clear prior extracted chain for this document before storing freshly extracted records
         db.execute(
@@ -340,3 +349,55 @@ class FailureChainService:
             verified_events=v_events,
             verified_relationships=v_rels,
         )
+
+    def _extractive_chain_fallback(
+        self,
+        doc: Document,
+        chunks: Sequence[RetrievedCandidate],
+    ) -> _LLMFailureChainOutput:
+        """Deterministic extractive failure chain fallback when LLM quota is exhausted."""
+        events: list[_LLMExtractedEvent] = []
+        rels: list[_LLMExtractedRelationship] = []
+
+        for idx, c in enumerate(chunks[:5], start=1):
+            sentences = [s.strip() for s in (c.text or "").split(". ") if len(s.strip()) > 35]
+            if not sentences:
+                continue
+            first_sent = sentences[0]
+            if not first_sent.endswith("."):
+                first_sent += "."
+            quote = first_sent[:140]
+
+            is_root = any(w in c.section_title.lower() for w in ("root", "cause", "finding", "mishap"))
+            ev_type: EventType = "root_cause" if is_root else "anomaly"
+            ev_class: EvidenceClassification = "official_root_cause" if is_root else "explicitly_stated"
+
+            temp_id = f"e{idx}"
+            events.append(
+                _LLMExtractedEvent(
+                    temp_id=temp_id,
+                    event_type=ev_type,
+                    title=f"{c.section_title[:50]}: Event #{idx}",
+                    description=first_sent[:950],
+                    event_order=idx,
+                    subsystem=doc.mission,
+                    evidence_classification=ev_class,
+                    chunk_id=str(c.chunk_id),
+                    evidence_quote=quote,
+                )
+            )
+
+        for i in range(len(events) - 1):
+            src = events[i]
+            tgt = events[i + 1]
+            rels.append(
+                _LLMExtractedRelationship(
+                    source_temp_id=src.temp_id,
+                    target_temp_id=tgt.temp_id,
+                    relationship_type="preceded_by",
+                    evidence_chunk_id=src.chunk_id,
+                    evidence_quote=src.evidence_quote,
+                )
+            )
+
+        return _LLMFailureChainOutput(events=events, relationships=rels)

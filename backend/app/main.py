@@ -69,7 +69,7 @@ async def attach_request_id_and_rate_limit(request: Request, call_next):
     req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     request.state.request_id = req_id
 
-    if request.url.path.startswith("/api/") and request.url.path != "/api/health":
+    if request.url.path.startswith("/api/") and request.url.path not in ("/api/health", "/api/ready"):
         try:
             rate_limiter.check(
                 client_rate_key(request, "api"),

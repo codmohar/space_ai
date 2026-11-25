@@ -16,6 +16,8 @@ venv/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/test-results/
+test-results/
 *.tsbuildinfo
 
 # Model caches & uploaded runtime files

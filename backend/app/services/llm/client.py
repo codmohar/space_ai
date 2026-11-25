@@ -62,9 +62,9 @@ class GeminiLLMClient(LLMClient):
                 m
                 for m in (
                     self.model_name,
-                    "gemini-flash-latest",
-                    "gemini-2.5-flash-lite",
-                    "gemini-2.0-flash",
+                    "gemini-2.5-flash",
+                    "gemini-1.5-flash",
+                    "gemini-1.5-pro",
                 )
                 if m
             )
@@ -100,11 +100,16 @@ class GeminiLLMClient(LLMClient):
                 )
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
+                err_str = str(exc)
                 logger.error("Gemini API error (%s) on attempt %d: %s", current_model, attempt + 1, exc)
+                # If resource exhausted / quota exceeded, break immediately and let fallbacks engage
+                if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str:
+                    logger.warning("Gemini quota exhausted on %s. Breaking early to fallback.", current_model)
+                    break
                 if active_model_idx + 1 < len(fallback_models):
                     active_model_idx += 1
                 if attempt + 1 < total_attempts:
-                    time.sleep(min(2.0, 0.6 * (attempt + 1)))
+                    time.sleep(0.2)
 
         raise ApiError(
             "LLM_GENERATION_FAILED",

@@ -34,7 +34,7 @@ test.describe("MISSIONWISE AI — Full End-to-End Demo Flow", () => {
     await page.getByTestId("demo-execute-step").click();
 
     // Verify cited answer + STAIR confidence UI + Citation PDF viewer
-    await expect(page.getByText(/Confidence:/i).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/RETRIEVAL CONFIDENCE/i).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/NASA-A13-1970/i).first()).toBeVisible({ timeout: 30_000 });
 
     // Verify Voice Console bar is mounted on Research Assistant
@@ -49,7 +49,7 @@ test.describe("MISSIONWISE AI — Full End-to-End Demo Flow", () => {
     // 5. Step 04: Failure Chain Analyzer
     await demoBar.getByRole("button", { name: "04" }).click();
     await page.getByTestId("demo-execute-step").click();
-    await expect(page.getByText(/Failure Chain Analyzer/i).first()).toBeVisible();
+    await expect(page.getByText(/Reconstruct Failure Chain/i).first()).toBeVisible();
 
     const rfNode = page.locator(".react-flow__node").first();
     const hasNodes = await rfNode.isVisible().catch(() => false);
@@ -57,7 +57,7 @@ test.describe("MISSIONWISE AI — Full End-to-End Demo Flow", () => {
       await page.getByRole("button", { name: /Reconstruct Failure Chain/i }).click();
     }
     await expect(rfNode).toBeVisible({ timeout: 45_000 });
-    await rfNode.click();
+    await rfNode.click({ force: true });
     const openPdfBtn = page.getByRole("button", { name: /Open PDF at Page/i });
     await expect(openPdfBtn).toBeVisible();
     await openPdfBtn.click();

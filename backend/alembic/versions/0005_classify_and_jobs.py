@@ -1,6 +1,6 @@
 """Add classification to documents and create ingestion_jobs table.
 
-Revision ID: 0005_classification_and_ingestion_jobs
+Revision ID: 0005_classify_and_jobs
 Revises: 0004_incidents_and_kg_edges
 Create Date: 2026-11-25 19:42:00
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0005_classification_and_ingestion_jobs"
+revision = "0005_classify_and_jobs"
 down_revision = "0004_incidents_and_kg_edges"
 branch_labels = None
 depends_on = None
@@ -30,7 +30,13 @@ def upgrade() -> None:
         unique=False,
     )
 
-    # 2. Create ingestion_jobs table
+    # 2. Add summary to conversations
+    op.add_column(
+        "conversations",
+        sa.Column("summary", sa.Text(), nullable=True),
+    )
+
+    # 3. Create ingestion_jobs table
     op.create_table(
         "ingestion_jobs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
