@@ -243,6 +243,65 @@ class EvalResultsResponse(BaseModel):
     methods: list[EvalMethodMetrics] = Field(default_factory=list)
 
 
+class FailureReconstructRequest(BaseModel):
+    document_id: uuid.UUID
+    force_rebuild: bool = True
+
+
+class FailureEventOut(BaseModel):
+    id: uuid.UUID
+    mission: str
+    event_type: str
+    title: str
+    description: str
+    event_order: int
+    timestamp_label: Optional[str] = None
+    subsystem: Optional[str] = None
+    evidence_classification: EvidenceClassification
+    verification_status: Literal["pending", "verified", "rejected"]
+    document_id: uuid.UUID
+    doc_code: str
+    document_title: str
+    source_url: str
+    licence: str
+    section_id: Optional[uuid.UUID] = None
+    section: str = "Document Body"
+    page_number: int
+    chunk_id: uuid.UUID
+    evidence_text: str
+    bbox_json: list[BBoxItem] = Field(default_factory=list)
+
+
+class FailureRelationshipOut(BaseModel):
+    id: uuid.UUID
+    source_event_id: uuid.UUID
+    target_event_id: uuid.UUID
+    relationship_type: Literal[
+        "caused_by",
+        "contributed_to",
+        "preceded_by",
+        "associated_with",
+        "reported_as",
+    ]
+    verification_status: Literal["pending", "verified", "rejected"]
+    document_id: uuid.UUID
+    section_id: Optional[uuid.UUID] = None
+    page_number: int
+    evidence_chunk_id: uuid.UUID
+    evidence_text: str
+
+
+class FailureChainResponse(BaseModel):
+    document_id: uuid.UUID
+    doc_code: str
+    document_title: str
+    mission: str
+    events: list[FailureEventOut]
+    relationships: list[FailureRelationshipOut]
+    verified_events: int
+    verified_relationships: int
+
+
 class CorpusStatsResponse(BaseModel):
     document_count: int
     section_count: int

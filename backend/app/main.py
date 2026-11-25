@@ -12,6 +12,7 @@ from app.api.chat import router as chat_router
 from app.api.citations import router as citations_router
 from app.api.documents import router as documents_router
 from app.api.eval import router as eval_router
+from app.api.failures import router as failures_router
 from app.api.health import router as health_router
 from app.api.retrieval import router as retrieval_router
 from app.api.stair import router as stair_router
@@ -62,3 +63,4 @@ app.include_router(chat_router)
 app.include_router(citations_router)
 app.include_router(eval_router)
 app.include_router(voice_router)
+app.include_router(failures_router)

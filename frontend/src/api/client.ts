@@ -76,6 +76,61 @@ export interface VoiceCapabilities {
   server_tts_engine: string;
 }
 
+export interface FailureEventOut {
+  id: string;
+  mission: string;
+  event_type: string;
+  title: string;
+  description: string;
+  event_order: number;
+  timestamp_label?: string | null;
+  subsystem?: string | null;
+  evidence_classification: EvidenceClassification;
+  verification_status: "pending" | "verified" | "rejected";
+  document_id: string;
+  doc_code: string;
+  document_title: string;
+  source_url: string;
+  licence: string;
+  section_id?: string | null;
+  section: string;
+  page_number: number;
+  chunk_id: string;
+  evidence_text: string;
+  bbox_json: BBoxItem[];
+}
+
+export type FailureRelationshipType =
+  | "caused_by"
+  | "contributed_to"
+  | "preceded_by"
+  | "associated_with"
+  | "reported_as";
+
+export interface FailureRelationshipOut {
+  id: string;
+  source_event_id: string;
+  target_event_id: string;
+  relationship_type: FailureRelationshipType;
+  verification_status: "pending" | "verified" | "rejected";
+  document_id: string;
+  section_id?: string | null;
+  page_number: number;
+  evidence_chunk_id: string;
+  evidence_text: string;
+}
+
+export interface FailureChainResponse {
+  document_id: string;
+  doc_code: string;
+  document_title: string;
+  mission: string;
+  events: FailureEventOut[];
+  relationships: FailureRelationshipOut[];
+  verified_events: number;
+  verified_relationships: number;
+}
+
 export interface DocumentSummary {
   id: string;
   doc_code: string;
@@ -181,6 +236,20 @@ export const api = {
     apiFetch<DocumentSectionNode[]>(`/api/documents/${docId}/toc`),
   evalResults: () => apiFetch<EvalResultsResponse>("/api/eval/results"),
   voiceCapabilities: () => apiFetch<VoiceCapabilities>("/api/voice/capabilities"),
+  reconstructFailures: (documentId: string, forceRebuild = true) =>
+    apiFetch<FailureChainResponse>("/api/failures/reconstruct", {
+      method: "POST",
+      body: JSON.stringify({
+        document_id: documentId,
+        force_rebuild: forceRebuild,
+      }),
+    }),
+  getFailureEvents: (documentId: string) =>
+    apiFetch<FailureEventOut[]>(`/api/failures/${documentId}/events`),
+  getFailureRelationships: (documentId: string) =>
+    apiFetch<FailureRelationshipOut[]>(
+      `/api/failures/${documentId}/relationships`
+    ),
   voiceWsUrl: () => {
     const u = new URL(API_BASE_URL);
     u.protocol = u.protocol === "https:" ? "wss:" : "ws:";

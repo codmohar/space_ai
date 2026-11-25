@@ -3,6 +3,7 @@ import { AssistantPage } from "./pages/AssistantPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { EvaluationPage } from "./pages/EvaluationPage";
+import { FailureChainPage } from "./pages/FailureChainPage";
 import { PhasePlaceholderPage } from "./pages/PhasePlaceholderPage";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 
@@ -14,13 +15,7 @@ export default function App() {
       {activeRoute === "dashboard" && <DashboardPage />}
       {activeRoute === "assistant" && <AssistantPage />}
       {activeRoute === "documents" && <DocumentsPage />}
-      {activeRoute === "failures" && (
-        <PhasePlaceholderPage
-          code="FCR-04"
-          title="Failure Chain Reconstruction"
-          description="Interactive React Flow causal/chronological timeline separating verified causality from pending system extractions, backed by failure_events and failure_relationships."
-        />
-      )}
+      {activeRoute === "failures" && <FailureChainPage />}
       {activeRoute === "similar" && (
         <PhasePlaceholderPage
           code="SIM-05"

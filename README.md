@@ -47,6 +47,10 @@ Results are saved to `data/evaluation/retrieval_results.json` and served by `GET
 - **Aerospace-Biased STT & Fallbacks:** Server `faster-whisper` uses an aerospace vocabulary prompt (`Small Forces`, `Newton-seconds`, `Apollo 13`, etc.); falls back to browser Web Speech API (`SpeechRecognition`) and `window.speechSynthesis` if server STT/TTS models are unavailable.
 - **Follow-up Memory & Spoken Style:** Resolves follow-ups (`"what was the initial issue?"`, `"explain simpler"`) into standalone questions and outputs concise spoken briefings with identical verified claims, live captions, PTT/hands-free modes, and barge-in/interrupt support.
 
+## Failure Chain Analyzer (Phase 4)
+- **Zero Hardcoded Chains:** `POST /api/failures/reconstruct` uses the shared `HybridRetriever` to pull investigation/anomaly/findings chunks, extracts structured `failure_events` and `failure_relationships` (`verification_status=pending`), and runs `evidence_validator` to promote records to `verified` only when the quote is supported in the stored chunk and both endpoints are verified.
+- **Chronology vs Causality:** Separates timeline ordering (`event_order`, `preceded_by`) from causal edges (`caused_by`, `contributed_to`, `associated_with`, `reported_as`) in the interactive React Flow canvas (`GET /api/failures/{id}/events`, `/relationships`), rendering unverified edges dashed with `"Unverified"` badges and offering one-click PDF jump + voice/text follow-up.
+
 ---
 
 ## Quickstart

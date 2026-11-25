@@ -46,6 +46,7 @@ class FailureEvent(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     mission: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, default="anomaly")
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     event_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

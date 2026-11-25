@@ -24,8 +24,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Mission Control", code: "SYS-01", icon: LayoutDashboard },
   { id: "assistant", label: "Research Assistant", code: "RAG-02", icon: FileSearch },
   { id: "documents", label: "Document Explorer", code: "DOC-03", icon: BookOpen },
-  { id: "failures", label: "Failure Chains", code: "FCR-04", icon: GitBranch, phaseTag: "P3" },
-  { id: "similar", label: "Similar Incidents", code: "SIM-05", icon: Layers, phaseTag: "P3" },
+  { id: "failures", label: "Failure Chains", code: "FCR-04", icon: GitBranch },
+  { id: "similar", label: "Similar Incidents", code: "SIM-05", icon: Layers, phaseTag: "P5" },
   { id: "evaluation", label: "Evaluation", code: "EVL-06", icon: Activity },
 ];
 
