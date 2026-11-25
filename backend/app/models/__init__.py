@@ -7,6 +7,7 @@ from app.models.documents import (
     DocumentEmbedding,
     DocumentSection,
     DocumentVersion,
+    IngestionJob,
 )
 from app.models.failure_kg import (
     CorrectiveAction,
@@ -33,6 +34,7 @@ __all__ = [
     "DocumentSection",
     "DocumentChunk",
     "DocumentEmbedding",
+    "IngestionJob",
     "StairTrainingPair",
     "RetrievalLog",
     "Conversation",

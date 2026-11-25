@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.auth import User
 from app.schemas import (
     KGGraphResponse,
     KGIndexReportSummary,
@@ -15,6 +16,8 @@ from app.schemas import (
     KGQueryRequest,
     KGQueryResponse,
 )
+from app.services.audit import record_audit_log
+from app.services.auth.security import get_optional_user
 from app.services.incidents.indexer import IncidentKGIndexer
 from app.services.kg.service import KnowledgeGraphService
 
@@ -32,7 +35,9 @@ def get_kg_service() -> KnowledgeGraphService:
 @router.post("/index", response_model=list[KGIndexReportSummary])
 def index_incidents_and_kg(
     req: KGIndexRequest,
+    request: Request,
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> list[KGIndexReportSummary]:
     indexer = get_indexer()
     if req.document_id is not None:
@@ -43,6 +48,17 @@ def index_incidents_and_kg(
         ]
     else:
         results = indexer.index_all_documents(db=db, force_rebuild=req.force_rebuild)
+
+    record_audit_log(
+        db=db,
+        action="kg.index",
+        resource_type="knowledge_graph",
+        resource_id=str(req.document_id) if req.document_id else "all",
+        user_id=current_user.id if current_user else None,
+        request_id=getattr(request.state, "request_id", None),
+        details={"documents_indexed": len(results)},
+    )
+    db.commit()
 
     return [
         KGIndexReportSummary(

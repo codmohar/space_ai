@@ -1,3 +1,4 @@
+import { AdminPage } from "./pages/AdminPage";
 import { AppShell } from "./components/layout/AppShell";
 import { AssistantPage } from "./pages/AssistantPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -20,6 +21,7 @@ export default function App() {
       {activeRoute === "similar" && <SimilarFailuresPage />}
       {activeRoute === "kg" && <KnowledgeGraphPage />}
       {activeRoute === "evaluation" && <EvaluationPage />}
+      {activeRoute === "admin" && <AdminPage />}
     </AppShell>
   );
 }

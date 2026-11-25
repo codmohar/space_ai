@@ -21,6 +21,8 @@ frontend/.vite/
 # Model caches & uploaded runtime files
 model_cache/
 backend/storage/
+storage/
+backups/
 *.log
 
 # Seed PDFs (tracked via manifest.json; download via scripts/download_seed_reports.py)

@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   Database,
@@ -32,12 +32,22 @@ export function SimilarFailuresPage() {
 
   const setFailureChainDocId = useWorkspaceStore((s) => s.setFailureChainDocId);
   const setActiveRoute = useWorkspaceStore((s) => s.setActiveRoute);
+  const prefillSimilarQuery = useWorkspaceStore((s) => s.prefillSimilarQuery);
+  const setPrefillSimilarQuery = useWorkspaceStore((s) => s.setPrefillSimilarQuery);
 
   const searchMutation = useMutation({
     mutationFn: (problem_description: string) =>
       api.searchSimilarFailures({ problem_description, top_k: 6 }),
     onSuccess: (data) => setSearchResult(data),
   });
+
+  useEffect(() => {
+    if (prefillSimilarQuery) {
+      setProblem(prefillSimilarQuery);
+      setPrefillSimilarQuery(null);
+      searchMutation.mutate(prefillSimilarQuery);
+    }
+  }, [prefillSimilarQuery, setPrefillSimilarQuery, searchMutation]);
 
   const reindexMutation = useMutation({
     mutationFn: () => api.indexKnowledgeGraph(null, true),

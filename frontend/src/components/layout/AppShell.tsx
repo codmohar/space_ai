@@ -8,10 +8,13 @@ import {
   Layers,
   LayoutDashboard,
   Network,
+  PlayCircle,
   ShieldAlert,
+  SlidersHorizontal,
 } from "lucide-react";
 import { api } from "../../api/client";
 import { type NavRoute, useWorkspaceStore } from "../../stores/workspaceStore";
+import { DemoWalkthroughBar } from "../demo/DemoWalkthroughBar";
 
 interface NavItem {
   id: NavRoute;
@@ -29,11 +32,14 @@ const NAV_ITEMS: NavItem[] = [
   { id: "similar", label: "Similar Incidents", code: "SIM-05", icon: Layers },
   { id: "kg", label: "Knowledge Graph", code: "KG-07", icon: Network },
   { id: "evaluation", label: "Evaluation", code: "EVL-06", icon: Activity },
+  { id: "admin", label: "Admin & Audit", code: "ADM-08", icon: SlidersHorizontal },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const activeRoute = useWorkspaceStore((s) => s.activeRoute);
   const setActiveRoute = useWorkspaceStore((s) => s.setActiveRoute);
+  const demoMode = useWorkspaceStore((s) => s.demoMode);
+  const setDemoMode = useWorkspaceStore((s) => s.setDemoMode);
 
   const { data: health } = useQuery({
     queryKey: ["health"],
@@ -150,11 +156,27 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
           </div>
           <div className="flex items-center gap-4 font-mono text-[11px] text-ink-secondary">
+            <button
+              type="button"
+              data-testid="toggle-demo-mode"
+              onClick={() => setDemoMode(!demoMode)}
+              className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[11px] transition-colors ${
+                demoMode
+                  ? "border-signal-amber bg-signal-amberDim text-signal-amber"
+                  : "border-console-borderStrong bg-console-elevated text-ink-primary hover:border-signal-amber"
+              }`}
+            >
+              <PlayCircle className="h-3.5 w-3.5" />
+              {demoMode ? "Demo Mode: ON" : "Demo Mode"}
+            </button>
+            <span className="text-console-borderStrong">|</span>
             <span>PROTOGUYS</span>
             <span className="text-console-borderStrong">|</span>
             <span>SHORTCUT: [/] FOCUS QUERY</span>
           </div>
         </header>
+
+        <DemoWalkthroughBar />
 
         <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
 

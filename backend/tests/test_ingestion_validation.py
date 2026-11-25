@@ -30,6 +30,17 @@ def test_provenance_requires_valid_source_url_and_licence() -> None:
     assert lic == "Public Domain"
 
 
+def _make_tiny_pdf_bytes(text: str = "Mars Climate Orbiter sample page") -> bytes:
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), text)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
 def test_pdf_magic_bytes_and_hash_dedupe_validation() -> None:
     with pytest.raises(ApiError) as exc_magic:
         validate_pdf_bytes(b"NOT_A_PDF_HEADER", filename="fake.pdf", content_type="application/pdf")
@@ -39,8 +50,9 @@ def test_pdf_magic_bytes_and_hash_dedupe_validation() -> None:
         validate_pdf_bytes(b"%PDF-1.7 body", filename="notes.txt", content_type="application/pdf")
     assert exc_ext.value.code == "INVALID_EXTENSION"
 
-    h1 = validate_pdf_bytes(b"%PDF-1.7 sample bytes", filename="mco.pdf", content_type="application/pdf")
-    h2 = validate_pdf_bytes(b"%PDF-1.7 sample bytes", filename="mco_copy.pdf", content_type="application/pdf")
+    sample_pdf = _make_tiny_pdf_bytes()
+    h1 = validate_pdf_bytes(sample_pdf, filename="mco.pdf", content_type="application/pdf")
+    h2 = validate_pdf_bytes(sample_pdf, filename="mco_copy.pdf", content_type="application/pdf")
     assert h1 == h2
     assert len(h1) == 64
 

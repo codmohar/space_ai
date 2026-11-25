@@ -7,6 +7,25 @@ Team: **ProtoGuys**
 
 ---
 
+## System Architecture
+
+```mermaid
+flowchart LR
+  User["Engineer / Analyst (Text or Voice)"] --> Frontend["React + TypeScript Console\n(React Flow, react-pdf, Zustand)"]
+  Frontend -->|POST /api/chat & WS /api/voice/stream| API["FastAPI API Layer\n(JWT RBAC, Rate Limiter, Audit Logs)"]
+  API --> Rewriter["Follow-up Query Rewriter\n(Conversation Memory)"]
+  Rewriter --> STAIR["STAIR SectionSelector\nL1 BM25-ToC | L2 ToC->Leaf | L3 LoRA"]
+  STAIR --> Hybrid["Hybrid Retrieval\n(pgvector HNSW + tsvector FTS + RRF)"]
+  Hybrid --> Rerank["Cross-Encoder Reranker\n(bge-reranker-base) + Sufficiency Gate"]
+  Rerank -->|Low Evidence| Abstain["Exact Abstention Message"]
+  Rerank -->|Sufficient Evidence| LLM["Provider-Agnostic LLMClient\n(Untrusted Delimiting + Pydantic JSON)"]
+  LLM --> Validator["Pre-Response Citation Validator\n(DB Chunk + Page + Quote Check)"]
+  Validator --> Output["Cited Claims + Deterministic Confidence\n+ Failure Chains + KG + PDF BBox"]
+  API --> DB[("PostgreSQL 16 + pgvector\nDocuments, Sections, Chunks, KG, Logs")]
+```
+
+---
+
 ## Phase 1 Capabilities
 
 - **PostgreSQL 16 + pgvector Schema (Alembic):** Full schema covering auth/audit, documents & versions, hierarchical `document_sections`, `document_chunks` with PDF bounding boxes and `tsvector` lexical search, `document_embeddings` (HNSW), `retrieval_logs`, `conversations`/`messages`/`citations`, and Phase 2+ failure chain & engineering knowledge graph tables.
@@ -83,11 +102,39 @@ docker compose exec backend python /scripts/ingest_documents.py --manifest /data
 
 ### 5. Access Services
 - Frontend UI: `http://localhost:5173`
-- Backend API & Swagger: `http://localhost:8000/docs`
-- Health Check: `http://localhost:8000/api/health`
+- Backend API & Swagger: `http://localhost:8001/docs` (container port `8000`)
+- Health Check: `http://localhost:8001/api/health`
 
-### 6. Run Tests
+### 6. Demo Mode & Seeded Credentials (Phase 6)
+- Toggle **Demo Mode** in the top console header to open the 6-step guided walkthrough (`Step 01` STAIR query -> `Step 02` PDF bbox viewer -> `Step 03` Similar Failures -> `Step 04` Failure Chain -> `Step 05` Knowledge Graph -> `Step 06` Evaluation & Admin).
+- Click **Pre-Warm Cache** (or call `POST /api/demo/prewarm`) to pre-compute and persist DB-verified responses in `data/demo/demo_cache.json`. Every cached response validates `chunk_id` resolution against PostgreSQL before being served.
+- **Seeded Dev Accounts** (change passwords in `.env` before non-local use):
+  - Admin (`ADM-08`): `admin@missionwise.local` / `Admin!Mission2026`
+  - Engineer: `engineer@missionwise.local` / `Engineer!Mission2026`
+
+### 7. Security & Hardening (Phase 6)
+- **JWT Authentication & RBAC:** HS256 JWT tokens + PBKDF2-HMAC-SHA256 salted password hashes protecting `GET/PATCH /api/admin/*` (`admin` role required).
+- **Rate Limiting:** Sliding-window per-client throttling across `/api/*` and stricter throttling on `/api/chat` returning structured `429 RATE_LIMIT_EXCEEDED`.
+- **Upload Hardening & Prompt-Injection Defense:** Rejects invalid extensions/MIME types, missing `%PDF-` magic bytes, malformed cross-reference tables, oversized page counts, path traversal filenames, and active PDF actions (`/JavaScript`, `/JS`, `/OpenAction`, `/Launch`); strips injection directives from archival text, encloses retrieved excerpts in untrusted delimiters, and enforces pre-response citation validation.
+- **Audit & Model/Prompt Telemetry:** All uploads, ingests, chat queries, failure reconstructions, KG runs, and role/settings changes log to `audit_logs` and `retrieval_logs` (including `embedding_model`, `reranker_model`, `llm_model`, `prompt_version`).
+
+### 8. Run Tests (Backend + Playwright E2E)
 ```bash
-cd backend
-pytest -v
+# Backend unit & integration tests (includes malicious PDF fixture)
+backend\.venv\Scripts\python.exe -m pytest backend/tests -v
+
+# Frontend TypeScript & Vite production build
+npm --prefix frontend run build
+
+# End-to-end Playwright smoke suite against running stack
+npx --prefix frontend playwright test
 ```
+
+---
+
+## Honest Limitations
+
+- **Corpus Scope:** Currently seeded with 3 public NASA mishap reports (`NASA-MCO-1999`, `NASA-A13-1970`, `NASA-MPL-2000`); queries outside indexed documents intentionally trigger exact abstention rather than extrapolating. Additional public NASA/ISRO/ESA PDFs can be added via `POST /api/documents/upload` or `scripts/ingest_documents.py`.
+- **STAIR L3/L4 LoRA Adapter:** `STAIRInspiredSectionSelector` (L2 ToC-to-leaf selection) runs out of the box. Fine-tuned L3/L4 constrained decoding requires running `scripts/train_stair.py` on a GPU and configuring `STAIR_LORA_ADAPTER_PATH`; otherwise `FineTunedSTAIRSectionSelector` gracefully falls back to L2.
+- **Voice STT/TTS:** Uses `faster-whisper` / Piper on the server when binaries/models are present, falling back to browser Web Speech API / `SpeechSynthesis` in unsupported or CPU-constrained environments.
+- **Safety Governance:** MISSIONWISE AI is an engineering lessons-learned research assistant and **must not** be used as a flight-readiness or spacecraft safety certification authority.

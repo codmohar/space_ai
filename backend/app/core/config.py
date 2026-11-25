@@ -70,8 +70,19 @@ class Settings(BaseSettings):
     piper_binary_path: str = "piper"
     piper_voice_path: str = ""
 
-    # Security & CORS
+    # Security, Auth, Rate Limiting & CORS
     jwt_secret_key: str = "change-me-in-production-32-chars-min"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 720
+    auth_required: bool = False
+    seed_demo_users: bool = True
+    demo_admin_password: str = "Admin!Mission2026"
+    demo_engineer_password: str = "Engineer!Mission2026"
+    rate_limit_per_minute: int = 120
+    chat_rate_limit_per_minute: int = 40
+    max_upload_pages: int = 800
+    prewarm_models: bool = True
+    demo_cache_path: Path = Path("../data/demo/demo_cache.json")
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
     @property

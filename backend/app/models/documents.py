@@ -42,6 +42,9 @@ class Document(Base):
     file_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     page_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     version: Mapped[str] = mapped_column(String(32), nullable=False, default="1.0")
+    classification: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="public", index=True
+    )  # public | internal | restricted
     ingestion_status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="completed"
     )  # pending | processing | completed | failed
@@ -165,3 +168,27 @@ class DocumentEmbedding(Base):
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
     )
+
+
+class IngestionJob(Base):
+    __tablename__ = "ingestion_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    document_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    doc_code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(32), nullable=False, default="pdf")
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="queued", index=True
+    )  # queued | processing | indexed | failed | cancelled
+    progress_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    logs: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+

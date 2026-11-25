@@ -96,6 +96,7 @@ class HybridRetriever:
         mission: Optional[str] = None,
         document_ids: Optional[list[uuid.UUID]] = None,
         top_k: Optional[int] = None,
+        allowed_classifications: Optional[list[str]] = None,
     ) -> tuple[list[RetrievedCandidate], dict[str, Any]]:
         t0 = time.perf_counter()
         final_k = top_k or self.settings.retrieval_top_k_rerank
@@ -114,6 +115,7 @@ class HybridRetriever:
             query=query,
             document_ids=scoped_doc_ids,
             top_k_sections=self.settings.stair_top_k_sections,
+            allowed_classifications=allowed_classifications,
         )
         selected_section_ids = selection_res.selected_section_ids
 
@@ -140,6 +142,8 @@ class HybridRetriever:
             dense_stmt = dense_stmt.where(DocumentChunk.document_id.in_(scoped_doc_ids))
         if selected_section_ids:
             dense_stmt = dense_stmt.where(DocumentChunk.section_id.in_(selected_section_ids))
+        if allowed_classifications:
+            dense_stmt = dense_stmt.where(Document.classification.in_(allowed_classifications))
 
         dense_rows = db.execute(dense_stmt).all()
         dense_ms = (time.perf_counter() - t_dense_start) * 1000.0
@@ -153,6 +157,10 @@ class HybridRetriever:
         )
         if scoped_doc_ids:
             bm25_pool_stmt = bm25_pool_stmt.where(DocumentChunk.document_id.in_(scoped_doc_ids))
+        if selected_section_ids:
+            bm25_pool_stmt = bm25_pool_stmt.where(DocumentChunk.section_id.in_(selected_section_ids))
+        if allowed_classifications:
+            bm25_pool_stmt = bm25_pool_stmt.where(Document.classification.in_(allowed_classifications))
         if selected_section_ids:
             bm25_pool_stmt = bm25_pool_stmt.where(DocumentChunk.section_id.in_(selected_section_ids))
 

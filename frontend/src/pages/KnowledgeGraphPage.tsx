@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Background,
@@ -18,6 +18,7 @@ import {
 } from "../api/client";
 import { CitationChip } from "../components/chat/CitationChip";
 import { CitationViewer } from "../components/viewer/CitationViewer";
+import { useWorkspaceStore } from "../stores/workspaceStore";
 
 const ENTITY_X_COLUMN: Record<string, number> = {
   mission: 40,
@@ -50,6 +51,9 @@ export function KnowledgeGraphPage() {
   const [selectedNode, setSelectedNode] = useState<KGNodeOut | null>(null);
   const [activePdfCit, setActivePdfCit] = useState<CitationOut | null>(null);
 
+  const prefillKgQuery = useWorkspaceStore((s) => s.prefillKgQuery);
+  const setPrefillKgQuery = useWorkspaceStore((s) => s.setPrefillKgQuery);
+
   const graphQuery = useQuery({
     queryKey: ["kg-graph", missionFilter],
     queryFn: () => api.getKnowledgeGraph(missionFilter || undefined),
@@ -65,6 +69,14 @@ export function KnowledgeGraphPage() {
       api.queryKnowledgeGraph(q, missionFilter || null),
     onSuccess: (res) => setQueryResult(res),
   });
+
+  useEffect(() => {
+    if (prefillKgQuery) {
+      setKgQuery(prefillKgQuery);
+      setPrefillKgQuery(null);
+      multihopMutation.mutate(prefillKgQuery);
+    }
+  }, [prefillKgQuery, setPrefillKgQuery, multihopMutation]);
 
   const { nodes, edges } = useMemo(() => {
     const rawNodes = graphQuery.data?.nodes || [];

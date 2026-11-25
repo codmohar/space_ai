@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.errors import ApiError
+from app.models.auth import User
 from app.models.documents import Document, DocumentChunk, DocumentSection
 from app.models.failure_kg import FailureEvent, FailureRelationship
 from app.schemas import (
@@ -19,6 +20,8 @@ from app.schemas import (
     FailureReconstructRequest,
     FailureRelationshipOut,
 )
+from app.services.audit import record_audit_log
+from app.services.auth.security import get_optional_user
 from app.services.failures.reconstructor import FailureChainService
 
 router = APIRouter(prefix="/api/failures", tags=["failures"])
@@ -98,7 +101,9 @@ def _serialize_relationships(
 @router.post("/reconstruct", response_model=FailureChainResponse)
 def reconstruct_failure_chain(
     req: FailureReconstructRequest,
+    request: Request,
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> FailureChainResponse:
     service = get_failure_service()
     res = service.reconstruct_for_document(
@@ -106,6 +111,20 @@ def reconstruct_failure_chain(
         document_id=req.document_id,
         force_rebuild=req.force_rebuild,
     )
+    record_audit_log(
+        db=db,
+        action="failure_chain.reconstruct",
+        resource_type="document",
+        resource_id=str(res.document.id),
+        user_id=current_user.id if current_user else None,
+        request_id=getattr(request.state, "request_id", None),
+        details={
+            "doc_code": res.document.doc_code,
+            "verified_events": res.verified_events,
+            "verified_relationships": res.verified_relationships,
+        },
+    )
+    db.commit()
     events_out = _serialize_events(db, res.document.id)
     rels_out = _serialize_relationships(db, res.document.id)
     return FailureChainResponse(

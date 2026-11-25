@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from abc import ABC, abstractmethod
 from typing import Type, TypeVar
 
@@ -56,14 +57,22 @@ class GeminiLLMClient(LLMClient):
         client = genai.Client(api_key=self.api_key)
         last_error: Exception | None = None
         prompt = user_prompt
-        fallback_models = [
-            m
-            for m in (self.model_name, "gemini-3.5-flash", "gemini-flash-latest")
-            if m
-        ]
+        fallback_models = list(
+            dict.fromkeys(
+                m
+                for m in (
+                    self.model_name,
+                    "gemini-flash-latest",
+                    "gemini-2.5-flash-lite",
+                    "gemini-2.0-flash",
+                )
+                if m
+            )
+        )
         active_model_idx = 0
+        total_attempts = max(max_retries + 1, len(fallback_models))
 
-        for attempt in range(max_retries + 1):
+        for attempt in range(total_attempts):
             current_model = fallback_models[min(active_model_idx, len(fallback_models) - 1)]
             try:
                 response = client.models.generate_content(
@@ -94,8 +103,8 @@ class GeminiLLMClient(LLMClient):
                 logger.error("Gemini API error (%s) on attempt %d: %s", current_model, attempt + 1, exc)
                 if active_model_idx + 1 < len(fallback_models):
                     active_model_idx += 1
-                if attempt >= max_retries:
-                    break
+                if attempt + 1 < total_attempts:
+                    time.sleep(min(2.0, 0.6 * (attempt + 1)))
 
         raise ApiError(
             "LLM_GENERATION_FAILED",

@@ -115,13 +115,14 @@ def rewrite_followup_query(
     query: str,
     history: Sequence[tuple[str, str]],
     mission_scope: Optional[str] = None,
+    conversation_summary: Optional[str] = None,
     llm_client: Optional[LLMClient] = None,
 ) -> RewriteResult:
     """Resolve follow-up queries ('what was the initial issue?', 'explain simpler') into a standalone question."""
     clean_query = query.strip()
     style = detect_response_style(clean_query)
 
-    if not _needs_rewrite(clean_query, history):
+    if not _needs_rewrite(clean_query, history) and not conversation_summary:
         return RewriteResult(
             original_query=clean_query,
             standalone_query=clean_query,
@@ -138,14 +139,17 @@ def rewrite_followup_query(
     recent = history[-6:]
     transcript = "\n".join(f"{role.upper()}: {text[:500]}" for role, text in recent)
 
+    summary_section = f"CONVERSATION ROLLING SUMMARY:\n{conversation_summary}\n\n" if conversation_summary else ""
+
     system_prompt = (
         "You rewrite a conversational follow-up question into a completely self-contained, standalone "
         "engineering question for document retrieval. Resolve pronouns ('it', 'that', 'the initial issue') "
-        "using the conversation history. If the user asks to 'explain simpler' or 'briefly', preserve the "
+        "using the conversation history and summary. If the user asks to 'explain simpler' or 'briefly', preserve the "
         "underlying factual topic in standalone_query and set response_style='simpler'. Do not answer the question."
     )
     user_prompt = (
         f"ACTIVE MISSION FILTER: {mission_scope or 'None'}\n\n"
+        f"{summary_section}"
         f"RECENT CONVERSATION:\n{transcript}\n\n"
         f"CURRENT FOLLOW-UP QUERY:\n{clean_query}"
     )

@@ -76,6 +76,7 @@ class SectionSelector(ABC):
         query: str,
         document_ids: Optional[list[uuid.UUID]] = None,
         top_k_sections: int = 6,
+        allowed_classifications: Optional[list[str]] = None,
     ) -> SectionSelectionResult:
         """Select leaf section IDs from the document ToC for a query."""
 
@@ -85,17 +86,21 @@ class SectionSelector(ABC):
         query: str,
         document_ids: Optional[list[uuid.UUID]] = None,
         top_k_sections: int = 6,
+        allowed_classifications: Optional[list[str]] = None,
     ) -> Optional[list[uuid.UUID]]:
         return self.select(
             db=db,
             query=query,
             document_ids=document_ids,
             top_k_sections=top_k_sections,
+            allowed_classifications=allowed_classifications,
         ).selected_section_ids
 
 
 def _load_toc_rows(
-    db: Session, document_ids: Optional[list[uuid.UUID]] = None
+    db: Session,
+    document_ids: Optional[list[uuid.UUID]] = None,
+    allowed_classifications: Optional[list[str]] = None,
 ) -> list[tuple[DocumentSection, Document]]:
     stmt = (
         select(DocumentSection, Document)
@@ -104,6 +109,8 @@ def _load_toc_rows(
     )
     if document_ids:
         stmt = stmt.where(DocumentSection.document_id.in_(document_ids))
+    if allowed_classifications:
+        stmt = stmt.where(Document.classification.in_(allowed_classifications))
     return list(db.execute(stmt).all())
 
 
@@ -119,6 +126,7 @@ class L1PassThroughSectionSelector(SectionSelector):
         query: str,
         document_ids: Optional[list[uuid.UUID]] = None,
         top_k_sections: int = 6,
+        allowed_classifications: Optional[list[str]] = None,
     ) -> SectionSelectionResult:
         return SectionSelectionResult(
             stair_level=self.stair_level,
@@ -139,8 +147,9 @@ class BM25ToCSectionSelector(SectionSelector):
         query: str,
         document_ids: Optional[list[uuid.UUID]] = None,
         top_k_sections: int = 6,
+        allowed_classifications: Optional[list[str]] = None,
     ) -> SectionSelectionResult:
-        rows = _load_toc_rows(db, document_ids)
+        rows = _load_toc_rows(db, document_ids, allowed_classifications=allowed_classifications)
         leaf_rows = [(sec, doc) for sec, doc in rows if sec.is_leaf]
         if not leaf_rows:
             leaf_rows = rows
@@ -250,8 +259,9 @@ class STAIRInspiredSectionSelector(SectionSelector):
         query: str,
         document_ids: Optional[list[uuid.UUID]] = None,
         top_k_sections: int = 6,
+        allowed_classifications: Optional[list[str]] = None,
     ) -> SectionSelectionResult:
-        rows = _load_toc_rows(db, document_ids)
+        rows = _load_toc_rows(db, document_ids, allowed_classifications=allowed_classifications)
         if not rows:
             return SectionSelectionResult(
                 stair_level=self.stair_level,
@@ -397,13 +407,20 @@ class FineTunedSTAIRSectionSelector(SectionSelector):
         query: str,
         document_ids: Optional[list[uuid.UUID]] = None,
         top_k_sections: int = 6,
+        allowed_classifications: Optional[list[str]] = None,
     ) -> SectionSelectionResult:
         if not self.is_trained_model_available():
             logger.info(
                 "STAIR L3 LoRA adapter not present (%s); using non-blocking fallback.",
                 self.adapter_path,
             )
-            res = self.fallback.select(db, query, document_ids, top_k_sections)
+            res = self.fallback.select(
+                db,
+                query,
+                document_ids,
+                top_k_sections,
+                allowed_classifications=allowed_classifications,
+            )
             res.used_fallback = True
             res.stub_not_trained = True
             return res
@@ -413,7 +430,7 @@ class FineTunedSTAIRSectionSelector(SectionSelector):
         try:
             from scripts.train_stair import predict_leaf_sections_with_lora  # type: ignore
 
-            rows = _load_toc_rows(db, document_ids)
+            rows = _load_toc_rows(db, document_ids, allowed_classifications=allowed_classifications)
             valid_leaf_map = {sec.id: (sec, doc) for sec, doc in rows if sec.is_leaf}
             predicted_ids = predict_leaf_sections_with_lora(
                 adapter_path=str(self.adapter_path),

@@ -15,6 +15,7 @@ from app.core.security import (
     safe_filename,
     validate_pdf_bytes,
     validate_provenance_fields,
+    validate_upload_bytes,
 )
 from app.models.documents import (
     Document,
@@ -24,6 +25,7 @@ from app.models.documents import (
     DocumentVersion,
 )
 from app.services.ingestion.chunker import chunk_extracted_document
+from app.services.ingestion.format_parsers import UniversalDocumentParser
 from app.services.ingestion.pdf_extractor import extract_pdf
 from app.services.retrieval.embeddings import get_embedding_service
 
@@ -55,14 +57,16 @@ class IngestionPipeline:
         org: str = "NASA",
         mission: str = "Unknown",
         version: str = "1.0",
-        content_type: str | None = "application/pdf",
+        classification: str = "public",
+        content_type: str | None = None,
     ) -> IngestionResult:
         clean_url, clean_licence = validate_provenance_fields(source_url, licence)
-        file_hash = validate_pdf_bytes(
+        file_hash = validate_upload_bytes(
             raw_bytes,
             filename=filename,
             content_type=content_type,
             max_upload_mb=self.settings.max_upload_mb,
+            max_upload_pages=self.settings.max_upload_pages,
         )
 
         # Hash-based deduplication
@@ -87,9 +91,10 @@ class IngestionPipeline:
         stored_path = self.settings.storage_dir / stored_name
         stored_path.write_bytes(raw_bytes)
 
-        return self._persist_extracted_pdf(
+        return self._persist_extracted_document(
             db=db,
-            pdf_path=stored_path,
+            raw_bytes=raw_bytes,
+            file_path=stored_path,
             file_hash=file_hash,
             doc_code=doc_code.strip(),
             title=title.strip(),
@@ -98,6 +103,7 @@ class IngestionPipeline:
             org=org.strip() or "NASA",
             mission=mission.strip() or "Unknown",
             version=version.strip() or "1.0",
+            classification=classification.strip() or "public",
         )
 
     def ingest_file(
@@ -111,13 +117,14 @@ class IngestionPipeline:
         org: str = "NASA",
         mission: str = "Unknown",
         version: str = "1.0",
+        classification: str = "public",
     ) -> IngestionResult:
         raw_bytes = file_path.read_bytes()
         clean_url, clean_licence = validate_provenance_fields(source_url, licence)
-        file_hash = validate_pdf_bytes(
+        file_hash = validate_upload_bytes(
             raw_bytes,
             filename=file_path.name,
-            content_type="application/pdf",
+            content_type=None,
             max_upload_mb=self.settings.max_upload_mb,
         )
 
@@ -141,9 +148,10 @@ class IngestionPipeline:
         if not stored_path.exists():
             shutil.copy2(file_path, stored_path)
 
-        return self._persist_extracted_pdf(
+        return self._persist_extracted_document(
             db=db,
-            pdf_path=stored_path,
+            raw_bytes=raw_bytes,
+            file_path=stored_path,
             file_hash=file_hash,
             doc_code=doc_code.strip(),
             title=title.strip(),
@@ -152,6 +160,7 @@ class IngestionPipeline:
             org=org.strip() or "NASA",
             mission=mission.strip() or "Unknown",
             version=version.strip() or "1.0",
+            classification=classification.strip() or "public",
         )
 
     def _persist_extracted_pdf(
@@ -166,8 +175,40 @@ class IngestionPipeline:
         org: str,
         mission: str,
         version: str,
+        classification: str = "public",
     ) -> IngestionResult:
-        extracted = extract_pdf(pdf_path)
+        raw_bytes = pdf_path.read_bytes()
+        return self._persist_extracted_document(
+            db=db,
+            raw_bytes=raw_bytes,
+            file_path=pdf_path,
+            file_hash=file_hash,
+            doc_code=doc_code,
+            title=title,
+            source_url=source_url,
+            licence=licence,
+            org=org,
+            mission=mission,
+            version=version,
+            classification=classification,
+        )
+
+    def _persist_extracted_document(
+        self,
+        db: Session,
+        raw_bytes: bytes,
+        file_path: Path,
+        file_hash: str,
+        doc_code: str,
+        title: str,
+        source_url: str,
+        licence: str,
+        org: str,
+        mission: str,
+        version: str,
+        classification: str = "public",
+    ) -> IngestionResult:
+        extracted = UniversalDocumentParser.extract(raw_bytes=raw_bytes, filename=file_path.name)
         chunk_drafts = chunk_extracted_document(extracted)
 
         doc = Document(
@@ -177,15 +218,17 @@ class IngestionPipeline:
             licence=licence,
             org=org,
             mission=mission,
-            file_path=str(pdf_path.resolve()),
+            file_path=str(file_path.resolve()),
             file_hash=file_hash,
             page_count=extracted.page_count,
             version=version,
+            classification=classification,
             ingestion_status="completed",
             metadata_json={
                 "pdf_metadata": extracted.pdf_metadata,
                 "ocr_pages": extracted.ocr_pages,
                 "low_quality_ocr_pages": extracted.low_quality_ocr_pages,
+                "toc_extraction_method": extracted.toc_extraction_method,
             },
         )
         db.add(doc)

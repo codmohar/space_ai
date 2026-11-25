@@ -65,6 +65,7 @@ class Conversation(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="Mission Inquiry")
     mission_scope: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False

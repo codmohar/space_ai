@@ -70,6 +70,7 @@ class RAGService:
         document_ids: Optional[list[uuid.UUID]] = None,
         selector_mode: Optional[str] = None,
         simpler: bool = False,
+        allowed_classifications: Optional[list[str]] = None,
     ) -> RAGExecutionResult:
         retriever = self._get_retriever(selector_mode)
         candidates, telemetry = retriever.search(
@@ -77,6 +78,7 @@ class RAGService:
             query=query,
             mission=mission,
             document_ids=document_ids,
+            allowed_classifications=allowed_classifications,
         )
 
         selected_sections = [
@@ -282,6 +284,7 @@ class RAGService:
         mission: Optional[str] = None,
         document_ids: Optional[list[uuid.UUID]] = None,
         selector_mode: Optional[str] = None,
+        allowed_classifications: Optional[list[str]] = None,
     ) -> ChatResponse:
         conv: Conversation | None = None
         if conversation_id is not None:
@@ -298,8 +301,9 @@ class RAGService:
 
         # Load conversation memory before inserting the new user message
         history: list[tuple[str, str]] = []
+        all_msgs: list[Message] = []
         if conv.id is not None:
-            prev_msgs = (
+            all_msgs = list(
                 db.execute(
                     select(Message)
                     .where(Message.conversation_id == conv.id)
@@ -308,12 +312,13 @@ class RAGService:
                 .scalars()
                 .all()
             )
-            history = [(m.role, m.content) for m in prev_msgs[-6:]]
+            history = [(m.role, m.content) for m in all_msgs[-6:]]
 
         rewritten = rewrite_followup_query(
             query=query,
             history=history,
             mission_scope=mission or conv.mission_scope,
+            conversation_summary=conv.summary,
             llm_client=self._llm_client,
         )
 
@@ -333,6 +338,7 @@ class RAGService:
             document_ids=document_ids,
             selector_mode=selector_mode,
             simpler=rewritten.response_style == "simpler",
+            allowed_classifications=allowed_classifications,
         )
 
         spoken_text = format_spoken_answer(
@@ -344,6 +350,32 @@ class RAGService:
 
         assistant_msg = Message(
             id=uuid.uuid4(),
+            conversation_id=conv.id,
+            retrieval_log_id=rag_res.retrieval_log_id,
+            role="assistant",
+            content=rag_res.answer,
+            confidence=rag_res.confidence,
+            confidence_score=rag_res.confidence_score,
+            abstained=rag_res.abstained,
+            claims_json=[c.model_dump(mode="json") for c in rag_res.claims],
+        )
+        db.add(assistant_msg)
+        db.flush()
+
+        # Rolling summary update after 4+ turns
+        from app.services.rag.summarizer import build_rolling_summary
+
+        total_turns = len(all_msgs) + 2
+        if total_turns >= 4 and total_turns % 2 == 0:
+            updated_history = [(m.role, m.content) for m in (all_msgs + [user_msg, assistant_msg])]
+            conv.summary = build_rolling_summary(
+                messages=updated_history[-10:],
+                existing_summary=conv.summary,
+                mission_scope=conv.mission_scope,
+                llm_client=self._llm_client,
+            )
+            db.add(conv)
+            db.flush()
             conversation_id=conv.id,
             retrieval_log_id=rag_res.retrieval_log_id,
             role="assistant",

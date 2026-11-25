@@ -39,6 +39,7 @@ class DocumentSummary(BaseModel):
     mission: str
     page_count: int
     version: str
+    classification: str = "public"
     ingestion_status: str
     chunk_count: int = 0
     section_count: int = 0
@@ -91,6 +92,7 @@ class IngestRequest(BaseModel):
     org: str = "NASA"
     mission: str = "Unknown"
     version: str = "1.0"
+    classification: str = "public"
 
 
 class IngestResponse(BaseModel):
@@ -101,6 +103,34 @@ class IngestResponse(BaseModel):
     section_count: int
     chunk_count: int
     ocr_pages: int
+    job_id: Optional[str] = None
+
+
+class IngestionJobOut(BaseModel):
+    job_id: str
+    doc_code: str
+    filename: str
+    file_type: str
+    status: str  # queued | processing | indexed | failed | cancelled
+    progress_pct: int
+    document_id: Optional[uuid.UUID] = None
+    error_message: Optional[str] = None
+    logs: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class JobCancelResponse(BaseModel):
+    job_id: str
+    status: str
+    message: str
+
+
+class SupportedFormatInfo(BaseModel):
+    extension: str
+    label: str
+    mime: str
+    ocr_enabled: bool = False
 
 
 class RetrievalSearchRequest(BaseModel):
@@ -428,3 +458,106 @@ class CorpusStatsResponse(BaseModel):
     ocr_chunk_count: int
     retrieval_log_count: int
     evaluation_status: str = "Not yet evaluated"
+
+
+class AuditLogOut(BaseModel):
+    id: uuid.UUID
+    user_id: Optional[uuid.UUID] = None
+    action: str
+    resource_type: str
+    resource_id: Optional[str] = None
+    request_id: Optional[str] = None
+    details: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class RetrievalLogOut(BaseModel):
+    id: uuid.UUID
+    request_id: str
+    query_text: str
+    mission_scope: Optional[str] = None
+    stair_level: str
+    top_rerank_score: Optional[float] = None
+    confidence_category: str
+    abstained: bool
+    latency_ms: int
+    embedding_model: str
+    reranker_model: str
+    llm_model: str
+    prompt_version: str
+    created_at: datetime
+
+
+class AdminUserOut(BaseModel):
+    id: uuid.UUID
+    email: str
+    full_name: str
+    role: str
+    is_active: bool
+    created_at: datetime
+
+
+class AdminRoleUpdateRequest(BaseModel):
+    role: Literal["admin", "engineer"]
+    is_active: Optional[bool] = None
+
+
+class RuntimeSettingsOut(BaseModel):
+    llm_provider: str
+    gemini_model: str
+    embedding_model: str
+    reranker_model: str
+    prompt_version: str
+    section_selector_mode: str
+    min_rerank_score_threshold: float
+    min_rrf_score_threshold: float
+    rate_limit_per_minute: int
+    chat_rate_limit_per_minute: int
+    max_upload_mb: int
+    max_upload_pages: int
+
+
+class RuntimeSettingsUpdateRequest(BaseModel):
+    section_selector_mode: Optional[Literal["auto", "l1_passthrough", "bm25_toc", "stair_l2", "stair_l3"]] = None
+    min_rerank_score_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    min_rrf_score_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    prompt_version: Optional[str] = Field(default=None, min_length=2, max_length=64)
+
+
+class DemoStepOut(BaseModel):
+    step_id: str
+    step_number: int
+    title: str
+    subtitle: str
+    target_page: str
+    suggested_query: Optional[str] = None
+    suggested_mission: Optional[str] = None
+    suggested_doc_code: Optional[str] = None
+    action_label: str
+    notes: str
+
+
+class DemoWalkthroughResponse(BaseModel):
+    enabled: bool
+    cache_warmed: bool
+    cached_query_count: int
+    generated_at: Optional[str] = None
+    steps: list[DemoStepOut]
+
+
+class DemoAskRequest(BaseModel):
+    query: str = Field(..., min_length=2, max_length=2000)
+    mission: Optional[str] = None
+    selector_mode: Optional[Literal["auto", "l1_passthrough", "bm25_toc", "stair_l2", "stair_l3"]] = None
+    use_cache: bool = True
+
+
+class DemoAskResponse(BaseModel):
+    cache_hit: bool
+    response: ChatResponse
+
+
+class DemoPrewarmResponse(BaseModel):
+    status: str
+    cached_queries: int
+    generated_at: str

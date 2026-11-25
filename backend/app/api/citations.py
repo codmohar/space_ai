@@ -10,15 +10,21 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.errors import ApiError
+from app.models.auth import User
 from app.models.documents import Document, DocumentChunk, DocumentSection
 from app.models.rag import Citation
 from app.schemas import BBoxItem, CitationOut
+from app.services.auth.security import get_optional_user
 
 router = APIRouter(prefix="/api/citations", tags=["citations"])
 
 
 @router.get("/{citation_id}", response_model=CitationOut)
-def get_citation(citation_id: uuid.UUID, db: Session = Depends(get_db)) -> CitationOut:
+def get_citation(
+    citation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+) -> CitationOut:
     row = db.execute(
         select(Citation, Document, DocumentChunk, DocumentSection)
         .join(Document, Document.id == Citation.document_id)
@@ -31,6 +37,19 @@ def get_citation(citation_id: uuid.UUID, db: Session = Depends(get_db)) -> Citat
         raise ApiError("CITATION_NOT_FOUND", "Citation not found.", status_code=404)
 
     cit, doc, chunk, sec = row
+
+    if doc.classification in ("internal", "restricted"):
+        if not current_user:
+            raise ApiError(
+                "UNAUTHORIZED",
+                f"Authentication required to access citation from {doc.classification} document.",
+                status_code=401,
+            )
+        role_name = getattr(current_user.role, "name", "")
+        if doc.classification == "restricted" and role_name != "admin":
+            raise ApiError("FORBIDDEN", "Admin clearance required to inspect citation.", status_code=403)
+        if doc.classification == "internal" and role_name not in ("admin", "engineer"):
+            raise ApiError("FORBIDDEN", "Engineer clearance required to inspect citation.", status_code=403)
     return CitationOut(
         id=cit.id,
         document_id=doc.id,

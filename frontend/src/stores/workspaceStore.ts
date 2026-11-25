@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ChatResponse, CitationOut } from "../api/client";
+import type { AuthUser, ChatResponse, CitationOut } from "../api/client";
 
 export type NavRoute =
   | "dashboard"
@@ -8,7 +8,8 @@ export type NavRoute =
   | "failures"
   | "similar"
   | "kg"
-  | "evaluation";
+  | "evaluation"
+  | "admin";
 
 export interface ChatTurn {
   id: string;
@@ -47,6 +48,19 @@ interface WorkspaceState {
 
   splitRatio: number;
   setSplitRatio: (ratio: number) => void;
+
+  authUser: AuthUser | null;
+  setAuthUser: (user: AuthUser | null) => void;
+
+  demoMode: boolean;
+  setDemoMode: (enabled: boolean) => void;
+  demoStepIndex: number;
+  setDemoStepIndex: (idx: number) => void;
+
+  prefillSimilarQuery: string | null;
+  setPrefillSimilarQuery: (q: string | null) => void;
+  prefillKgQuery: string | null;
+  setPrefillKgQuery: (q: string | null) => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -87,4 +101,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   splitRatio: 52,
   setSplitRatio: (splitRatio) =>
     set({ splitRatio: Math.min(72, Math.max(30, splitRatio)) }),
+
+  authUser: null,
+  setAuthUser: (authUser) => set({ authUser }),
+
+  demoMode: false,
+  setDemoMode: (demoMode) => set({ demoMode }),
+  demoStepIndex: 0,
+  setDemoStepIndex: (demoStepIndex) => set({ demoStepIndex }),
+
+  prefillSimilarQuery: null,
+  setPrefillSimilarQuery: (prefillSimilarQuery) => set({ prefillSimilarQuery }),
+  prefillKgQuery: null,
+  setPrefillKgQuery: (prefillKgQuery) => set({ prefillKgQuery }),
 }));

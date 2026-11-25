@@ -286,7 +286,133 @@ export interface HealthResponse {
   embedding_model: string;
   reranker_model: string;
   llm_provider: string;
+  llm_model?: string;
   llm_configured: boolean;
+  prompt_version?: string;
+  auth_required?: boolean;
+  models_warmed?: { embedding: boolean; reranker: boolean };
+  eval_status?: string;
+  incident_count?: number;
+  kg_entity_count?: number;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  full_name: string;
+  role: "admin" | "engineer" | string;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+}
+
+export interface AdminUserOut {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AuditLogOut {
+  id: string;
+  user_id?: string | null;
+  action: string;
+  resource_type: string;
+  resource_id?: string | null;
+  request_id?: string | null;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface RetrievalLogOut {
+  id: string;
+  request_id: string;
+  query_text: string;
+  mission_scope?: string | null;
+  stair_level: string;
+  top_rerank_score?: number | null;
+  confidence_category: string;
+  abstained: boolean;
+  latency_ms: number;
+  embedding_model: string;
+  reranker_model: string;
+  llm_model: string;
+  prompt_version: string;
+  created_at: string;
+}
+
+export interface RuntimeSettingsOut {
+  llm_provider: string;
+  gemini_model: string;
+  embedding_model: string;
+  reranker_model: string;
+  prompt_version: string;
+  section_selector_mode: string;
+  min_rerank_score_threshold: number;
+  min_rrf_score_threshold: number;
+  rate_limit_per_minute: number;
+  chat_rate_limit_per_minute: number;
+  max_upload_mb: number;
+  max_upload_pages: number;
+}
+
+export interface DemoStepOut {
+  step_id: string;
+  step_number: number;
+  title: string;
+  subtitle: string;
+  target_page: string;
+  suggested_query?: string | null;
+  suggested_mission?: string | null;
+  suggested_doc_code?: string | null;
+  action_label: string;
+  notes: string;
+}
+
+export interface DemoWalkthroughResponse {
+  enabled: boolean;
+  cache_warmed: boolean;
+  cached_query_count: number;
+  generated_at?: string | null;
+  steps: DemoStepOut[];
+}
+
+export interface DemoAskResponse {
+  cache_hit: boolean;
+  response: ChatResponse;
+}
+
+export interface DemoPrewarmResponse {
+  status: string;
+  cached_queries: number;
+  generated_at: string;
+}
+
+const AUTH_TOKEN_KEY = "mw_auth_token";
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(AUTH_TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
 }
 
 export interface CorpusStatsResponse {
@@ -299,10 +425,12 @@ export interface CorpusStatsResponse {
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAuthToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers || {}),
     },
   });
@@ -387,6 +515,41 @@ export const api = {
     apiFetch<ChatResponse>("/api/chat", {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  login: (email: string, password: string) =>
+    apiFetch<TokenResponse>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  me: () => apiFetch<AuthUser>("/api/auth/me"),
+  listAdminUsers: () => apiFetch<AdminUserOut[]>("/api/admin/users"),
+  updateUserRole: (userId: string, role: "admin" | "engineer", isActive?: boolean) =>
+    apiFetch<AdminUserOut>(`/api/admin/users/${userId}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role, is_active: isActive }),
+    }),
+  listAuditLogs: (limit = 100) =>
+    apiFetch<AuditLogOut[]>(`/api/admin/audit-logs?limit=${limit}`),
+  listRetrievalLogs: (limit = 100) =>
+    apiFetch<RetrievalLogOut[]>(`/api/admin/retrieval-logs?limit=${limit}`),
+  getAdminSettings: () => apiFetch<RuntimeSettingsOut>("/api/admin/settings"),
+  updateAdminSettings: (payload: Partial<RuntimeSettingsOut>) =>
+    apiFetch<RuntimeSettingsOut>("/api/admin/settings", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  demoWalkthrough: () => apiFetch<DemoWalkthroughResponse>("/api/demo/walkthrough"),
+  demoPrewarm: () =>
+    apiFetch<DemoPrewarmResponse>("/api/demo/prewarm", { method: "POST" }),
+  demoAsk: (payload: {
+    query: string;
+    mission?: string | null;
+    selector_mode?: string | null;
+    use_cache?: boolean;
+  }) =>
+    apiFetch<DemoAskResponse>("/api/demo/ask", {
+      method: "POST",
+      body: JSON.stringify({ ...payload, use_cache: payload.use_cache ?? true }),
     }),
   documentPdfUrl: (docId: string) =>
     `${API_BASE_URL}/api/documents/${docId}/file`,
