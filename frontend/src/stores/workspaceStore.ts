@@ -19,6 +19,16 @@ export interface ChatTurn {
   error?: string;
 }
 
+export interface IngestionNotification {
+  jobId: string;
+  filename: string;
+  title: string;
+  status: "queued" | "processing" | "indexed" | "failed" | "cancelled";
+  progressPct: number;
+  message?: string;
+  documentId?: string | null;
+}
+
 interface WorkspaceState {
   activeRoute: NavRoute;
   setActiveRoute: (route: NavRoute) => void;
@@ -61,6 +71,11 @@ interface WorkspaceState {
   setPrefillSimilarQuery: (q: string | null) => void;
   prefillKgQuery: string | null;
   setPrefillKgQuery: (q: string | null) => void;
+
+  activeIngestions: IngestionNotification[];
+  addIngestionNotification: (notif: IngestionNotification) => void;
+  updateIngestionNotification: (jobId: string, patch: Partial<IngestionNotification>) => void;
+  removeIngestionNotification: (jobId: string) => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -114,4 +129,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   setPrefillSimilarQuery: (prefillSimilarQuery) => set({ prefillSimilarQuery }),
   prefillKgQuery: null,
   setPrefillKgQuery: (prefillKgQuery) => set({ prefillKgQuery }),
+
+  activeIngestions: [],
+  addIngestionNotification: (notif) =>
+    set((state) => ({
+      activeIngestions: [
+        ...state.activeIngestions.filter((n) => n.jobId !== notif.jobId),
+        notif,
+      ],
+    })),
+  updateIngestionNotification: (jobId, patch) =>
+    set((state) => ({
+      activeIngestions: state.activeIngestions.map((n) =>
+        n.jobId === jobId ? { ...n, ...patch } : n
+      ),
+    })),
+  removeIngestionNotification: (jobId) =>
+    set((state) => ({
+      activeIngestions: state.activeIngestions.filter((n) => n.jobId !== jobId),
+    })),
 }));

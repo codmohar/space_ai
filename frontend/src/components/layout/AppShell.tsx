@@ -15,6 +15,7 @@ import {
 import { api } from "../../api/client";
 import { type NavRoute, useWorkspaceStore } from "../../stores/workspaceStore";
 import { DemoWalkthroughBar } from "../demo/DemoWalkthroughBar";
+import { IngestionNotificationBanner } from "../documents/IngestionNotificationBanner";
 
 interface NavItem {
   id: NavRoute;
@@ -177,6 +178,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         <DemoWalkthroughBar />
+        <IngestionNotificationBanner />
 
         <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
 

@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, FileUp, Loader2, UploadCloud, X } from "lucide-react";
-import { API_BASE_URL, type IngestionJobOut } from "../../api/client";
+import { API_BASE_URL, api, type IngestionJobOut } from "../../api/client";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 
 interface AddDocumentModalProps {
   isOpen: boolean;
@@ -22,6 +23,16 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
   const [classification, setClassification] = useState<"public" | "internal" | "restricted">("public");
   const [jobs, setJobs] = useState<IngestionJobOut[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const addIngestionNotification = useWorkspaceStore((s) => s.addIngestionNotification);
+  const updateIngestionNotification = useWorkspaceStore((s) => s.updateIngestionNotification);
+  const pollTimersRef = useRef<{ [key: string]: ReturnType<typeof setInterval> }>({});
+
+  useEffect(() => {
+    return () => {
+      Object.values(pollTimersRef.current).forEach((t) => clearInterval(t));
+    };
+  }, []);
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -71,6 +82,58 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
       setJobs(newJobs);
       queryClient.invalidateQueries({ queryKey: ["documents"] });
       queryClient.invalidateQueries({ queryKey: ["corpus-stats"] });
+
+      newJobs.forEach((job) => {
+        const fileTitle = title.trim() || job.filename.replace(/\.[^/.]+$/, "");
+        addIngestionNotification({
+          jobId: job.job_id,
+          filename: job.filename,
+          title: fileTitle,
+          status: "processing",
+          progressPct: job.progress_pct || 15,
+          message: `Reading & processing document "${fileTitle}"... Extracting text, ToC hierarchy, chunks & vector embeddings`,
+        });
+
+        if (pollTimersRef.current[job.job_id]) {
+          clearInterval(pollTimersRef.current[job.job_id]);
+        }
+
+        pollTimersRef.current[job.job_id] = setInterval(async () => {
+          try {
+            const updated = await api.getJobStatus(job.job_id);
+            setJobs((prev) => prev.map((j) => (j.job_id === job.job_id ? updated : j)));
+
+            if (updated.status === "indexed") {
+              updateIngestionNotification(job.job_id, {
+                status: "indexed",
+                progressPct: 100,
+                message: `Document seeded successfully in database! "${fileTitle}" is now ready for RAG and STAIR queries.`,
+                documentId: updated.document_id,
+              });
+              queryClient.invalidateQueries({ queryKey: ["documents"] });
+              queryClient.invalidateQueries({ queryKey: ["corpus-stats"] });
+              clearInterval(pollTimersRef.current[job.job_id]);
+              delete pollTimersRef.current[job.job_id];
+            } else if (updated.status === "failed" || updated.status === "cancelled") {
+              updateIngestionNotification(job.job_id, {
+                status: updated.status,
+                message: updated.error_message || "Ingestion process encountered an error.",
+              });
+              clearInterval(pollTimersRef.current[job.job_id]);
+              delete pollTimersRef.current[job.job_id];
+            } else {
+              updateIngestionNotification(job.job_id, {
+                status: updated.status,
+                progressPct: updated.progress_pct,
+                message: `Reading and processing document (${updated.progress_pct}%)...`,
+              });
+            }
+          } catch {
+            // Keep polling
+          }
+        }, 1200);
+      });
+
       if (onSuccess) onSuccess();
     },
     onError: (err: Error) => {
@@ -239,19 +302,49 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
 
           {/* Active submitted jobs tracker */}
           {jobs.length > 0 && (
-            <div className="space-y-2 rounded border border-signal-amber/40 bg-signal-amberDim/20 p-3 font-mono">
+            <div className="space-y-2.5 rounded border border-signal-amber/40 bg-signal-amberDim/20 p-3.5 font-mono">
               <div className="flex items-center gap-2 font-semibold text-signal-amber">
                 <CheckCircle2 className="h-4 w-4" />
-                <span>Submitted {jobs.length} Document(s) to Background Queue</span>
+                <span>Submitted {jobs.length} Document(s) for Processing & DB Seeding</span>
               </div>
-              {jobs.map((j) => (
-                <div key={j.job_id} className="flex items-center justify-between text-[11px]">
-                  <span>{j.filename}</span>
-                  <span className="rounded bg-console-base px-1.5 py-0.5 uppercase text-signal-amber">
-                    {j.status} ({j.progress_pct}%)
-                  </span>
-                </div>
-              ))}
+              {jobs.map((j) => {
+                const isDone = j.status === "indexed";
+                const isFail = j.status === "failed";
+                return (
+                  <div key={j.job_id} className="rounded border border-console-border bg-console-base/80 p-2.5 text-[11px]">
+                    <div className="flex items-center justify-between font-medium">
+                      <span className="text-ink-primary">{j.filename}</span>
+                      <span
+                        className={`rounded px-1.5 py-0.5 uppercase ${
+                          isDone
+                            ? "bg-status-verified text-console-base"
+                            : isFail
+                              ? "bg-status-conflict text-white"
+                              : "bg-signal-amber text-console-base"
+                        }`}
+                      >
+                        {isDone ? "SEEDED (100%)" : isFail ? "FAILED" : `PROCESSING (${j.progress_pct}%)`}
+                      </span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-console-borderStrong">
+                      <div
+                        style={{ width: `${Math.max(10, j.progress_pct)}%` }}
+                        className={`h-full transition-all duration-300 ${
+                          isDone ? "bg-status-verified" : isFail ? "bg-status-conflict" : "bg-signal-amber"
+                        }`}
+                      />
+                    </div>
+                    <p className="mt-1.5 text-[10px] text-ink-secondary">
+                      {isDone
+                        ? "✓ Successfully parsed, embedded, and seeded into database."
+                        : isFail
+                          ? `✗ Ingestion failed: ${j.error_message || "unknown error"}`
+                          : "Reading PDF structure, ToC, chunking, and embedding into database..."}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

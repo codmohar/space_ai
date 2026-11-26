@@ -605,6 +605,10 @@ export const api = {
       `/api/documents/${docId}`,
       { method: "DELETE" }
     ),
+  getJobStatus: (jobId: string) =>
+    apiFetch<IngestionJobOut>(`/api/documents/jobs/${jobId}`),
+  listJobs: (limit = 20) =>
+    apiFetch<IngestionJobOut[]>(`/api/documents/jobs?limit=${limit}`),
   documentPdfUrl: (docId: string) =>
     `${API_BASE_URL}/api/documents/${docId}/file`,
 };
