@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal, get_db
+from app.services.audit import record_audit_log
 from app.services.rag.service import RAGService
 from app.services.voice.aerospace_vocab import build_aerospace_vocab_prompt
 from app.services.voice.stt import get_stt_service
@@ -87,6 +88,7 @@ async def voice_stream_ws(websocket: WebSocket) -> None:
     conversation_id: Optional[uuid.UUID] = None
     mission: Optional[str] = None
     selector_mode: Optional[str] = None
+    document_ids: Optional[list[uuid.UUID]] = None
     active_turn_id = 0
     active_task: Optional[asyncio.Task] = None
 
@@ -106,10 +108,27 @@ async def voice_stream_ws(websocket: WebSocket) -> None:
                 request_id=request_id,
                 conversation_id=conversation_id,
                 mission=mission,
+                document_ids=document_ids,
                 selector_mode=selector_mode,
+                allowed_classifications=["public", "internal", "restricted"],
             )
             if turn_id != active_turn_id:
                 return  # Barge-in occurred before response finished
+
+            record_audit_log(
+                db=db,
+                action="rag.chat.voice",
+                resource_type="conversation",
+                resource_id=str(chat_res.conversation_id),
+                request_id=request_id,
+                details={
+                    "confidence": chat_res.confidence,
+                    "abstained": chat_res.abstained,
+                    "citation_count": len(chat_res.citations),
+                    "stair_level": chat_res.stair_level,
+                },
+            )
+            db.commit()
 
             conversation_id = chat_res.conversation_id
             await websocket.send_json(
@@ -189,6 +208,8 @@ async def voice_stream_ws(websocket: WebSocket) -> None:
                 conversation_id = uuid.UUID(raw_cid) if raw_cid else None
                 mission = payload.get("mission") or None
                 selector_mode = payload.get("selector_mode") or None
+                raw_doc_ids = payload.get("document_ids") or []
+                document_ids = [uuid.UUID(d) for d in raw_doc_ids] if raw_doc_ids else None
                 await websocket.send_json({"type": "configured", "conversation_id": raw_cid})
 
             elif msg_type == "audio_chunk":

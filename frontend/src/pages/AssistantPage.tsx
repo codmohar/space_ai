@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  Mic,
   RotateCcw,
   Send,
 } from "lucide-react";
@@ -88,13 +89,17 @@ export function AssistantPage() {
     mission: selectedMission,
     selectorMode,
     onTranscript: (text) => {
+      const clean = text.trim();
+      if (!clean) return;
+      setInput(clean);
       addTurn({
         id: crypto.randomUUID(),
         role: "user",
-        query: `[VOICE] ${text}`,
+        query: clean,
       });
     },
     onAnswer: (res) => {
+      setInput("");
       applyChatResponse(res);
     },
   });
@@ -690,12 +695,16 @@ export function AssistantPage() {
           );
         })}
 
-        {chatMutation.isPending && (
+        {(chatMutation.isPending ||
+          voice.voiceState === "thinking" ||
+          voice.voiceState === "transcribing") && (
           <div className="space-y-2 rounded border border-console-border bg-console-surface p-4">
             <div className="h-3 w-40 animate-pulse rounded bg-console-elevated" />
             <div className="h-14 w-full animate-pulse rounded bg-console-elevated" />
             <span className="block font-mono text-[11px] text-ink-muted">
-              Selecting ToC leaf sections, running hybrid retrieval & citation validation...
+              {voice.voiceState === "transcribing"
+                ? "Transcribing voice input via Sarvam AI STT..."
+                : "Selecting ToC leaf sections, running hybrid retrieval & citation validation..."}
             </span>
           </div>
         )}
@@ -716,8 +725,31 @@ export function AssistantPage() {
             className="flex-1 rounded border border-console-borderStrong bg-console-bg px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-signal-amber focus:outline-none"
           />
           <button
+            type="button"
+            onMouseDown={voice.startPushToTalk}
+            onMouseUp={voice.stopPushToTalk}
+            onTouchStart={voice.startPushToTalk}
+            onTouchEnd={voice.stopPushToTalk}
+            title="Hold to speak voice query (Sarvam AI)"
+            className={`inline-flex items-center gap-1.5 rounded border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition-colors ${
+              voice.voiceState === "listening" && voice.mode === "ptt"
+                ? "border-signal-amber bg-signal-amber text-console-base animate-pulse"
+                : "border-console-borderStrong bg-console-bg text-ink-secondary hover:text-signal-amber hover:border-signal-amber"
+            }`}
+          >
+            <Mic className="h-4 w-4" />
+            <span className="hidden sm:inline">
+              {voice.voiceState === "listening" ? "Listening..." : "Voice"}
+            </span>
+          </button>
+          <button
             type="submit"
-            disabled={chatMutation.isPending || input.trim().length < 2}
+            disabled={
+              chatMutation.isPending ||
+              voice.voiceState === "thinking" ||
+              voice.voiceState === "transcribing" ||
+              input.trim().length < 2
+            }
             className="inline-flex items-center gap-1.5 rounded border border-signal-amber bg-signal-amber px-4 py-2 text-xs font-semibold uppercase tracking-wide text-console-base hover:bg-signal-amber/90 disabled:opacity-40"
           >
             <Send className="h-3.5 w-3.5" />

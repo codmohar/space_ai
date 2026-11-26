@@ -14,6 +14,7 @@ interface UseVoiceAssistantOptions {
   conversationId: string | null;
   mission: string;
   selectorMode: string;
+  documentIds?: string[];
   onTranscript: (text: string) => void;
   onAnswer: (res: ChatResponse, spokenText: string) => void;
 }
@@ -33,6 +34,7 @@ export function useVoiceAssistant({
   conversationId,
   mission,
   selectorMode,
+  documentIds,
   onTranscript,
   onAnswer,
 }: UseVoiceAssistantOptions) {
@@ -127,6 +129,7 @@ export function useVoiceAssistant({
             conversation_id: conversationId,
             mission: mission || null,
             selector_mode: selectorMode || null,
+            document_ids: documentIds || [],
           })
         );
         resolve(ws);
@@ -234,10 +237,11 @@ export function useVoiceAssistant({
           conversation_id: conversationId,
           mission: mission || null,
           selector_mode: selectorMode || null,
+          document_ids: documentIds || [],
         })
       );
     }
-  }, [conversationId, mission, selectorMode]);
+  }, [conversationId, mission, selectorMode, documentIds]);
 
   const interrupt = useCallback(() => {
     stopAudioPlayback();
