@@ -184,11 +184,11 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
           {/* Drag & Drop Picker */}
           <div className="rounded border-2 border-dashed border-console-borderStrong bg-console-base/60 p-5 text-center hover:border-signal-amber">
             <UploadCloud className="mx-auto h-8 w-8 text-signal-amber" />
-            <p className="mt-2 font-mono text-xs font-medium text-ink-primary">
-              Drag and drop PDF/DOCX/PPTX files here, or browse
+            <p className="mt-2 font-mono text-xs font-semibold text-ink-primary">
+              Drag & drop Text PDFs, Scanned/Picture PDFs, or Images here
             </p>
             <p className="mt-1 font-mono text-[11px] text-ink-muted">
-              PDF, scanned PDF (OCR), DOCX, PPTX, TXT, MD, CSV, XLSX, XML (max 100MB)
+              Auto-detects Text vs Picture/Scanned pages · Fast In-Memory OCR & ToC hierarchy extraction
             </p>
             <label className="mt-3 inline-block cursor-pointer rounded border border-console-borderStrong bg-console-elevated px-3 py-1.5 font-mono text-xs hover:border-signal-amber">
               Select Files
@@ -201,8 +201,19 @@ export function AddDocumentModal({ isOpen, onClose, onSuccess }: AddDocumentModa
               />
             </label>
             {files.length > 0 && (
-              <div className="mt-3 font-mono text-xs text-signal-amber">
-                Selected: {files.map((f) => f.name).join(", ")}
+              <div className="mt-3 space-y-1 font-mono text-xs">
+                {files.map((f, i) => {
+                  const isPdf = f.name.toLowerCase().endsWith(".pdf");
+                  const isImg = /\.(png|jpe?g|tiff?)$/i.test(f.name);
+                  return (
+                    <div key={i} className="flex items-center justify-between rounded bg-console-elevated px-2 py-1 text-[11px]">
+                      <span className="text-signal-amber truncate max-w-[280px]">{f.name}</span>
+                      <span className="text-ink-muted">
+                        {(f.size / (1024 * 1024)).toFixed(2)} MB · {isPdf ? "PDF (Text/Picture)" : isImg ? "Picture/Image (OCR)" : "Document"}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

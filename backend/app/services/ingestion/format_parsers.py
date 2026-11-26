@@ -1137,13 +1137,8 @@ class UniversalDocumentParser:
     def extract(cls, raw_bytes: bytes, filename: str) -> ExtractedDocument:
         ext = Path(filename).suffix.lower()
         if ext == ".pdf":
-            # Extract PDF via fitz/PyMuPDF
-            import tempfile
-
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=True) as tmp:
-                tmp.write(raw_bytes)
-                tmp.flush()
-                return extract_pdf(Path(tmp.name))
+            # Extract PDF directly in-memory via PyMuPDF without disk I/O
+            return extract_pdf(raw_bytes)
         elif ext in (".txt",):
             return parse_text(raw_bytes, filename)
         elif ext in (".md",):

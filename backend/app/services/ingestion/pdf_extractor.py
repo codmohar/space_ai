@@ -17,9 +17,9 @@ from app.services.llm.client import LLMClient, get_llm_client
 logger = logging.getLogger(__name__)
 
 MIN_NATIVE_CHARS_PER_PAGE = 40
-MIN_OCR_MEAN_CONFIDENCE = 55.0
-MIN_OCR_ALNUM_RATIO = 0.55
-OCR_RENDER_DPI = 250
+MIN_OCR_MEAN_CONFIDENCE = 50.0
+MIN_OCR_ALNUM_RATIO = 0.50
+OCR_RENDER_DPI = 150
 
 
 @dataclass
@@ -97,17 +97,27 @@ def evaluate_ocr_quality(words: list[str], confidences: list[float]) -> tuple[fl
     return round(mean_conf, 2), round(alnum_ratio, 3), low_quality
 
 
-def _needs_ocr(blocks: list[ExtractedBlock]) -> bool:
+def _needs_ocr(page: fitz.Page, blocks: list[ExtractedBlock]) -> bool:
     raw = "".join(b.text for b in blocks)
     stripped = re.sub(r"\s+", "", raw)
+    # 1. Scanned page / zero or almost zero native text
     if len(stripped) < MIN_NATIVE_CHARS_PER_PAGE:
         return True
+    # 2. Corrupt font / non-standard glyph encoding
     cid_matches = len(re.findall(r"\(cid:\d+\)", raw))
     if cid_matches > 3:
         return True
+    # 3. High proportion of non-alphanumeric junk
     printable_alnum = sum(1 for ch in stripped if ch.isalnum())
     if stripped and (printable_alnum / len(stripped)) < 0.35:
         return True
+    # 4. Hybrid page: sparse text (<150 chars) but has embedded images/diagrams
+    try:
+        images = page.get_images()
+        if len(stripped) < 150 and len(images) > 0:
+            return True
+    except Exception:
+        pass
     return False
 
 
@@ -162,13 +172,13 @@ def _extract_native_blocks(page: fitz.Page, page_number: int) -> list[ExtractedB
 
 
 def _extract_ocr_blocks(page: fitz.Page, page_number: int) -> tuple[list[ExtractedBlock], float, bool]:
-    import io
     from PIL import Image
     import pytesseract
 
-    pix = page.get_pixmap(dpi=OCR_RENDER_DPI)
-    img = Image.open(io.BytesIO(pix.tobytes("png")))
-    data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+    # Render at 150 DPI in grayscale for instantaneous memory copy and 3x-4x faster OCR
+    pix = page.get_pixmap(dpi=OCR_RENDER_DPI, colorspace=fitz.csGRAY)
+    img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
+    data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT, config="--psm 3")
 
     scale = 72.0 / OCR_RENDER_DPI
     width = float(page.rect.width)
@@ -332,7 +342,7 @@ def _infer_numbering_level(line: str, font_size: float, threshold: float) -> int
 def _parse_printed_toc_page(pages: list[ExtractedPage]) -> list[tuple[int, str, int]]:
     """Detect and parse explicit printed 'Table of Contents' page in scanned or text PDFs."""
     toc_entries: list[tuple[int, str, int]] = []
-    
+
     # 1. Search first 10 pages for an explicit "Table of Contents" or "Contents" title
     toc_page: Optional[ExtractedPage] = None
     for p in pages[:10]:
@@ -359,40 +369,56 @@ def _parse_printed_toc_page(pages: list[ExtractedPage]) -> list[tuple[int, str, 
 
     for raw_line in lines:
         line = raw_line.strip()
-        if not line or len(line) < 3 or len(line) > 120:
+        if not line or len(line) < 3 or len(line) > 140:
             continue
         if any(h in line.lower() for h in ("table of contents", "contents", "inquiry board report", "page |", "page 1")):
             continue
 
+        # Extract trailing printed page number if present (e.g. "... 12" or ".... 5")
+        trailing_page_match = re.search(r"[\.\s\-_]{2,}\s*(\d+)$|\s{2,}(\d+)$", line)
+        printed_page_num: Optional[int] = None
+        cleaned_line = line
+        if trailing_page_match:
+            raw_p = trailing_page_match.group(1) or trailing_page_match.group(2)
+            try:
+                p_val = int(raw_p)
+                if 1 <= p_val <= len(pages):
+                    printed_page_num = p_val
+            except ValueError:
+                printed_page_num = None
+            cleaned_line = line[: trailing_page_match.start()].strip()
+
         # Look for pattern: "1.1 General description" or "1. The failure" or "Conclusions"
-        num_match = re.match(r"^(\d+(?:\.\d+)*)\.?\s+(.+)$", line)
+        num_match = re.match(r"^(\d+(?:\.\d+)*)\.?\s+(.+)$", cleaned_line)
         if num_match:
             sec_num = num_match.group(1)
             sec_title = num_match.group(2).strip()
+            sec_title = re.sub(r"[\.\s\-_]{2,}\s*\d+$|\s+\d+$", "", sec_title).strip()
             level = min(4, sec_num.count(".") + 1)
             full_title = f"{sec_num} {sec_title}"
 
             # Find page where this heading actually appears in the document
-            found_page = toc_page.page_number + 1
-            for p_num, doc_line in full_doc_lines:
-                if p_num <= toc_page.page_number:
-                    continue
-                # Match heading keywords in doc line
-                if sec_title.lower() in doc_line.lower() or full_title.lower() in doc_line.lower():
-                    found_page = p_num
-                    break
+            found_page = printed_page_num or (toc_page.page_number + 1)
+            if not printed_page_num:
+                for p_num, doc_line in full_doc_lines:
+                    if p_num <= toc_page.page_number:
+                        continue
+                    if sec_title.lower() in doc_line.lower() or full_title.lower() in doc_line.lower():
+                        found_page = p_num
+                        break
 
             toc_entries.append((level, full_title, found_page))
-        elif re.match(r"^[A-Z][a-zA-Z\s]{3,40}$", line):
+        elif re.match(r"^[A-Z][a-zA-Z\s]{3,40}$", cleaned_line):
             # Non-numbered top-level chapter (e.g. "Conclusions", "The failure", "Foreword")
-            found_page = toc_page.page_number + 1
-            for p_num, doc_line in full_doc_lines:
-                if p_num <= toc_page.page_number:
-                    continue
-                if line.lower() in doc_line.lower():
-                    found_page = p_num
-                    break
-            toc_entries.append((1, line, found_page))
+            found_page = printed_page_num or (toc_page.page_number + 1)
+            if not printed_page_num:
+                for p_num, doc_line in full_doc_lines:
+                    if p_num <= toc_page.page_number:
+                        continue
+                    if cleaned_line.lower() in doc_line.lower():
+                        found_page = p_num
+                        break
+            toc_entries.append((1, cleaned_line, found_page))
 
     return toc_entries
 
@@ -517,12 +543,17 @@ def _repair_sections_with_llm(
 
 
 def extract_pdf(
-    pdf_path: Path,
+    pdf_source: Path | str | bytes,
     llm_client: Optional[LLMClient] = None,
     allow_llm_toc_repair: bool = True,
 ) -> ExtractedDocument:
     """Extract ToC/sections (outline -> heuristic -> LLM repair), page blocks, bboxes, and OCR."""
-    doc = fitz.open(str(pdf_path))
+    if isinstance(pdf_source, (bytes, bytearray)):
+        doc = fitz.open(stream=pdf_source, filetype="pdf")
+        doc_name = "in_memory.pdf"
+    else:
+        doc = fitz.open(str(pdf_source))
+        doc_name = Path(pdf_source).name
     try:
         page_count = len(doc)
         pdf_metadata = dict(doc.metadata or {})
@@ -541,11 +572,20 @@ def extract_pdf(
             ocr_conf: float | None = None
             ocr_low_q = False
 
-            if _needs_ocr(blocks):
+            if _needs_ocr(page, blocks):
                 try:
                     ocr_blocks, ocr_conf, ocr_low_q = _extract_ocr_blocks(page, page_number)
                     if ocr_blocks:
-                        blocks = ocr_blocks
+                        if not blocks:
+                            blocks = ocr_blocks
+                        else:
+                            # Hybrid page: preserve native text and append OCR text from picture/diagram
+                            existing_texts = {re.sub(r"\s+", "", b.text.lower()) for b in blocks}
+                            for ob in ocr_blocks:
+                                ob_clean = re.sub(r"\s+", "", ob.text.lower())
+                                if ob_clean and ob_clean not in existing_texts:
+                                    blocks.append(ob)
+                                    existing_texts.add(ob_clean)
                         ocr_used = True
                         ocr_pages += 1
                         if ocr_low_q:
